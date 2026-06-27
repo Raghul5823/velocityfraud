@@ -1,0 +1,71 @@
+name: velocityfraud-dev
+
+services:
+
+  # -------------------------------------------------------------------------
+  # Apache Kafka 3.7 in KRaft mode (no ZooKeeper)
+  # Single broker, single partition replication — POC scale only.
+  # -------------------------------------------------------------------------
+  kafka:
+    image: apache/kafka:3.7.0
+    container_name: vf-kafka
+    ports:
+      - "9092:9092"   # external client port
+      - "9093:9093"   # controller port (intra-broker)
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: "broker,controller"
+      KAFKA_LISTENERS: "PLAINTEXT://:9092,CONTROLLER://:9093"
+      KAFKA_ADVERTISED_LISTENERS: "PLAINTEXT://localhost:9092"
+      KAFKA_CONTROLLER_LISTENER_NAMES: "CONTROLLER"
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: "CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT"
+      KAFKA_CONTROLLER_QUORUM_VOTERS: "1@localhost:9093"
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"   # safety: typo cannot spawn topics
+      KAFKA_LOG_RETENTION_HOURS: 168              # 7 days default
+      KAFKA_HEAP_OPTS: "-Xmx2g -Xms2g"            # cap JVM
+      CLUSTER_ID: "MkU3OEVBNTcwNTJENDM2Qk"
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  # -------------------------------------------------------------------------
+  # Apicurio Schema Registry — Avro schema compatibility enforcement
+  # -------------------------------------------------------------------------
+  apicurio:
+    image: apicurio/apicurio-registry-mem:2.5.10.Final
+    container_name: vf-apicurio
+    ports:
+      - "8080:8080"
+    depends_on:
+      kafka:
+        condition: service_healthy
+    environment:
+      QUARKUS_PROFILE: prod
+
+  # -------------------------------------------------------------------------
+  # MLflow tracking server (self-hosted, file-backed for POC)
+  # -------------------------------------------------------------------------
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:v2.18.0
+    container_name: vf-mlflow
+    ports:
+      - "5000:5000"
+    volumes:
+      - mlflow-data:/mlflow
+    command: >
+      mlflow server
+        --host 0.0.0.0
+        --port 5000
+        --backend-store-uri sqlite:///mlflow/mlflow.db
+        --default-artifact-root /mlflow/artifacts
+
+volumes:
+  kafka-data:
+  mlflow-data:
