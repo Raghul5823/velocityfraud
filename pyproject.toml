@@ -49,5 +49,10 @@ explicit = true
 [tool.hatch.build.targets.wheel]
 packages = ["src/velocityfraud"]
 
+[dependency-groups]
+dev = [
+    "pytest>=8.0.0",
+]
+
 [tool.uv]
 package = true
