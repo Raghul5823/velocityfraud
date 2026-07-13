@@ -1,0 +1,36 @@
+{
+  "type": "record",
+  "name": "TransactionScoredEvent",
+  "namespace": "com.velocityfraud.scoring",
+  "doc": "A scored transaction event. Echoes the original TransactionEvent fields plus the fraud-detection model's verdict. Produced to topic transactions.scored by the fast-path scorer (Layer 3).",
+  "fields": [
+    { "name": "event_id",                 "type": "string",  "doc": "UUID copied from the source TransactionEvent (idempotency key)." },
+    { "name": "event_timestamp_ms",       "type": "long",    "doc": "Milliseconds since epoch — original transaction time." },
+    { "name": "customer_id",              "type": "string",  "doc": "Stable customer identifier (card1 in IEEE-CIS)." },
+    { "name": "card_token",               "type": "string",  "doc": "SHA-256 token of the card concat (PII-safe)." },
+    { "name": "amount",                   "type": "double",  "doc": "Transaction amount in source currency." },
+    { "name": "currency",                 "type": "string",  "doc": "ISO-4217 currency code (USD for IEEE-CIS)." },
+    { "name": "amount_fx_normalised",     "type": "double",  "doc": "Amount in canonical currency (USD for POC)." },
+    { "name": "merchant_id_hash",         "type": "string",  "doc": "Tokenized merchant identity." },
+    { "name": "merchant_name",            "type": "string",  "doc": "Display-friendly merchant name." },
+    { "name": "mcc",                      "type": "string",  "doc": "Merchant Category Code (4-digit, ISO-18245)." },
+    { "name": "merchant_country",         "type": "string",  "doc": "Two-char country code or '00'." },
+    { "name": "ip_address_hash",          "type": "string",  "doc": "Hashed IP address." },
+    { "name": "device_fingerprint_hash",  "type": "string",  "doc": "Hashed device fingerprint." },
+    { "name": "geo_distance_km",          "type": "double",  "doc": "Distance from cardholder home (fraud signal)." },
+    { "name": "source_label",             "type": "string",  "doc": "Where the event originated: 'replayer', 'live', etc." },
+    { "name": "schema_version",           "type": "string",  "doc": "Source TransactionEvent schema version." },
+
+    { "name": "fraud_score",              "type": "double",  "doc": "Model-predicted P(fraud) in [0.0, 1.0]." },
+    { "name": "decision",                 "type": { "type": "enum", "name": "Decision", "symbols": ["ALLOW", "REVIEW", "BLOCK"] }, "doc": "Threshold-based action: ALLOW (<0.5), REVIEW (0.5-0.85), BLOCK (>=0.85)." },
+    { "name": "model_name",               "type": "string",  "doc": "Name of the model that produced the score (from CHAMPION.txt)." },
+    { "name": "model_version",            "type": "string",  "doc": "Version tag (e.g. 'v1')." },
+    { "name": "scored_at_ms",             "type": "long",    "doc": "Milliseconds since epoch when scoring completed." },
+    { "name": "scoring_latency_ms",       "type": "long",    "doc": "End-to-end scorer latency (consume -> produce) in ms." },
+    { "name": "feature_completeness",     "type": "double",  "doc": "Fraction of model features filled with real data (vs -999 sentinel). 1.0 = full feature set; lower means degraded confidence." },
+
+    { "name": "blocklist_hit",            "type": "boolean", "default": false, "doc": "TRUE if this event matched an entity on the Layer 8 Redis blocklist (card / merchant / IP / device). When TRUE, ML scoring was skipped." },
+    { "name": "blocklist_tier",           "type": { "type": "enum", "name": "BlocklistTier", "symbols": ["NONE", "HOT", "BLOCK"] }, "default": "NONE", "doc": "NONE = no blocklist match, ML ran normally. HOT = hot-list match, decision elevated to REVIEW. BLOCK = blocklist match, decision forced to BLOCK." },
+    { "name": "blocklist_reason",         "type": "string",  "default": "",    "doc": "Human-readable reason if blocklist_hit=TRUE (e.g., 'card_token=abc: 4 prior BLOCKs in 22h'). Empty string when no hit." }
+  ]
+}

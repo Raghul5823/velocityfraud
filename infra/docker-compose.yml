@@ -5,20 +5,25 @@ services:
   # -------------------------------------------------------------------------
   # Apache Kafka 3.7 in KRaft mode (no ZooKeeper)
   # Single broker, single partition replication — POC scale only.
+  # Dual listeners:
+  #   HOST       -> reachable from Windows host (Python replayer/consumer)
+  #   DOCKER     -> reachable from other containers (Kafka UI, etc.)
+  #   CONTROLLER -> internal to KRaft
   # -------------------------------------------------------------------------
   kafka:
     image: apache/kafka:3.7.0
     container_name: vf-kafka
     ports:
-      - "9092:9092"   # external client port
+      - "9092:9092"   # host-side client port
       - "9093:9093"   # controller port (intra-broker)
     environment:
       KAFKA_NODE_ID: 1
       KAFKA_PROCESS_ROLES: "broker,controller"
-      KAFKA_LISTENERS: "PLAINTEXT://:9092,CONTROLLER://:9093"
-      KAFKA_ADVERTISED_LISTENERS: "PLAINTEXT://localhost:9092"
+      KAFKA_LISTENERS: "HOST://:9092,DOCKER://:29092,CONTROLLER://:9093"
+      KAFKA_ADVERTISED_LISTENERS: "HOST://localhost:9092,DOCKER://kafka:29092"
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: "CONTROLLER:PLAINTEXT,HOST:PLAINTEXT,DOCKER:PLAINTEXT"
       KAFKA_CONTROLLER_LISTENER_NAMES: "CONTROLLER"
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: "CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT"
+      KAFKA_INTER_BROKER_LISTENER_NAME: "DOCKER"
       KAFKA_CONTROLLER_QUORUM_VOTERS: "1@localhost:9093"
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
@@ -26,6 +31,7 @@ services:
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"   # safety: typo cannot spawn topics
       KAFKA_LOG_RETENTION_HOURS: 168              # 7 days default
       KAFKA_HEAP_OPTS: "-Xmx2g -Xms2g"            # cap JVM
+      KAFKA_LOG_DIRS: "/var/lib/kafka/data"       # ensure persistence via the mounted volume
       CLUSTER_ID: "MkU3OEVBNTcwNTJENDM2Qk"
     volumes:
       - kafka-data:/var/lib/kafka/data
@@ -36,7 +42,8 @@ services:
       retries: 12
 
   # -------------------------------------------------------------------------
-  # Apicurio Schema Registry — Avro schema compatibility enforcement
+  # Apicurio Schema Registry — Avro schema compatibility enforcement.
+  # Exposes a Confluent-compatible API at /apis/ccompat/v7 (used by Kafka UI).
   # -------------------------------------------------------------------------
   apicurio:
     image: apicurio/apicurio-registry-mem:2.5.10.Final
@@ -48,6 +55,33 @@ services:
         condition: service_healthy
     environment:
       QUARKUS_PROFILE: prod
+
+  # -------------------------------------------------------------------------
+  # Kafka UI (Provectus) — browser-based ops view.
+  # http://localhost:8081
+  # - Cluster + broker health, topic stats, consumer groups, lag
+  # - Live message view with Avro decoding via Apicurio's ccompat API
+  # - Read-only (DYNAMIC_CONFIG_ENABLED=false) — no accidental deletes
+  # -------------------------------------------------------------------------
+  kafka-ui:
+    image: provectuslabs/kafka-ui:v0.7.2
+    container_name: vf-kafka-ui
+    ports:
+      - "8081:8080"
+    depends_on:
+      kafka:
+        condition: service_healthy
+      apicurio:
+        condition: service_started
+    environment:
+      KAFKA_CLUSTERS_0_NAME: "velocityfraud-dev"
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: "kafka:29092"
+      KAFKA_CLUSTERS_0_SCHEMAREGISTRY: "http://apicurio:8080/apis/ccompat/v7"
+      KAFKA_CLUSTERS_0_DEFAULTKEYSERDE: "String"
+      KAFKA_CLUSTERS_0_DEFAULTVALUESERDE: "SchemaRegistry"
+      DYNAMIC_CONFIG_ENABLED: "false"
+      AUTH_TYPE: "DISABLED"
+      JAVA_OPTS: "-Xms256m -Xmx512m"
 
   # -------------------------------------------------------------------------
   # MLflow tracking server (self-hosted, file-backed for POC)
@@ -66,6 +100,53 @@ services:
         --backend-store-uri sqlite:///mlflow/mlflow.db
         --default-artifact-root /mlflow/artifacts
 
+  # -------------------------------------------------------------------------
+  # Redis 7 — in-memory blocklist / hot-list store for Layer 8.
+  # Sub-millisecond lookups so the scorer can pre-filter repeat offenders
+  # BEFORE running the XGBoost model. Non-destructive: if Redis is empty,
+  # scorer works as usual.
+  # -------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: vf-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: >
+      redis-server
+        --appendonly yes
+        --maxmemory 128mb
+        --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # -------------------------------------------------------------------------
+  # PostgreSQL 16 — persistent storage for scored + enriched events.
+  # Consumed by Layer 6 sink; read by Power BI (Layer 7).
+  # -------------------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    container_name: vf-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: vf
+      POSTGRES_PASSWORD: vfpass
+      POSTGRES_DB: velocityfraud
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vf -d velocityfraud"]
+      interval: 10s
+      timeout: 5s
+      retries: 8
+
 volumes:
   kafka-data:
   mlflow-data:
+  postgres-data:
+  redis-data:

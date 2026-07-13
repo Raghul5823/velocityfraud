@@ -1,0 +1,28 @@
+{
+  "type": "record",
+  "name": "TransactionEvent",
+  "namespace": "com.velocityfraud.events",
+  "doc": "A single transaction event as produced by the IEEE-CIS replayer.",
+  "fields": [
+    { "name": "event_id",                "type": "string",                  "doc": "UUID v4, used for idempotency" },
+    { "name": "event_timestamp_ms",      "type": "long",                    "doc": "When the transaction occurred (epoch ms)" },
+    { "name": "customer_id",             "type": "string",                  "doc": "Used as the Kafka message key for partitioning" },
+    { "name": "card_token",              "type": "string",                  "doc": "Hashed PAN — never raw" },
+
+    { "name": "amount",                  "type": "double",                  "doc": "Transaction value in original currency" },
+    { "name": "currency",                "type": "string",                  "doc": "ISO 4217 (USD, INR, EUR)" },
+    { "name": "amount_fx_normalised",    "type": "double",                  "doc": "Amount converted to USD for comparison" },
+
+    { "name": "merchant_id_hash",        "type": "string",                  "doc": "Hashed merchant identifier" },
+    { "name": "merchant_name",           "type": "string",                  "doc": "Raw merchant name — feeds DistilBERT text anomaly" },
+    { "name": "mcc",                     "type": "string",                  "doc": "4-digit merchant category code" },
+    { "name": "merchant_country",        "type": "string",                  "doc": "ISO 3166-1 alpha-2" },
+
+    { "name": "ip_address_hash",         "type": "string",                  "doc": "Hashed IP address" },
+    { "name": "device_fingerprint_hash", "type": "string",                  "doc": "Hashed device fingerprint" },
+    { "name": "geo_distance_km",         "type": "double",                  "doc": "Distance from customer's last-seen location" },
+
+    { "name": "source_label",            "type": "string", "default": "replayer", "doc": "replayer | live" },
+    { "name": "schema_version",          "type": "string", "default": "v1",       "doc": "For evolution tracking" }
+  ]
+}
