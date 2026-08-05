@@ -52,6 +52,7 @@ packages = ["src/velocityfraud"]
 [dependency-groups]
 dev = [
     "pytest>=8.0.0",
+    "pytest-cov>=7.1.0",
 ]
 
 [tool.uv]
