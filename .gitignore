@@ -34,6 +34,8 @@ data/interim/*
 !data/raw/.gitkeep
 !data/processed/.gitkeep
 !data/interim/.gitkeep
+# keep the tiny feature schema the app needs at inference time
+!data/processed/feature_meta.json
 
 # Models — never commit binary model artefacts
 *.pkl
@@ -62,3 +64,13 @@ desktop.ini
 
 # Power BI temp
 *.pbix.tmp
+
+# RandomForest challenger is 149 MB (> GitHub's 100 MB limit) - keep it out.
+# The champion xgboost_v1.pkl (4.4 MB) + CHAMPION.txt ARE tracked so the repo runs.
+models/random_forest_v1.pkl
+
+# Data exports (regenerated from Postgres for Databricks upload)
+data/exports/
+
+# Load-test generated output (k6-summary.json is kept as the cert artifact)
+perf/locust_*.csv

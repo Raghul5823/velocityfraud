@@ -37,6 +37,8 @@ dependencies = [
     "redis>=5.0.0",
     # ---- Layer 5b: Groq LLM scoring (free-tier only) ----
     "groq>=0.11.0",
+    "fastapi>=0.138.2",
+    "uvicorn>=0.49.0",
 ]
 
 [tool.uv.sources]
@@ -51,9 +53,36 @@ packages = ["src/velocityfraud"]
 
 [dependency-groups]
 dev = [
+    "great-expectations>=1.21.0",
+    "locust>=2.46.3",
     "pytest>=8.0.0",
     "pytest-cov>=7.1.0",
 ]
 
 [tool.uv]
 package = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "integration: exercises live infra (Redis / Postgres / Kafka / champion model); skips gracefully when a service is unavailable",
+]
+
+[tool.coverage.run]
+source = ["src/velocityfraud"]
+# Omit modules that cannot be meaningfully exercised in a unit/integration suite:
+#   training/*            - full-dataset model training (683MB IEEE-CIS CSV, minutes-long runs)
+#   slow_path.py          - Spark Structured Streaming, requires a Databricks/Spark runtime
+#   text_anomaly*.py      - DistilBERT masked-LM, ~250MB model download + inference
+#   groq_scorer.py        - external Groq LLM API (network + API key, rate-limited free tier)
+omit = [
+    "*/training/*",
+    "*/slow_path.py",
+    "*/text_anomaly.py",
+    "*/text_anomaly_consumer.py",
+    "*/groq_scorer.py",
+]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false
