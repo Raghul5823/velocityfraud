@@ -65,9 +65,9 @@ desktop.ini
 # Power BI temp
 *.pbix.tmp
 
-# RandomForest challenger is 149 MB (> GitHub's 100 MB limit) - keep it out.
-# The champion xgboost_v1.pkl (4.4 MB) + CHAMPION.txt ARE tracked so the repo runs.
-models/random_forest_v1.pkl
+# Model binaries (*.pkl) are ignored above. Train locally or transfer via scp per
+# docs/oracle_deploy.md. CHAMPION.txt + data/processed/feature_meta.json ARE tracked
+# so the app knows which model + feature schema to load.
 
 # Data exports (regenerated from Postgres for Databricks upload)
 data/exports/
