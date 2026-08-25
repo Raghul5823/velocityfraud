@@ -31,3 +31,9 @@ def get_scored_schema() -> dict:
 def get_enriched_schema() -> dict:
     """Return the parsed TransactionEnrichedEvent schema (cached)."""
     return fastavro.schema.load_schema(str(_SCHEMA_DIR / "transaction-enriched-event.avsc"))
+
+
+@lru_cache(maxsize=1)
+def get_feedback_schema() -> dict:
+    """Return the parsed TransactionFeedbackEvent schema (cached)."""
+    return fastavro.schema.load_schema(str(_SCHEMA_DIR / "transaction-feedback-event.avsc"))

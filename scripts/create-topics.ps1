@@ -11,7 +11,8 @@ $topics = @(
     @{ name = "transactions.raw";          partitions = 3; retentionMs = 604800000 },  # 7 days
     @{ name = "transactions.scored";       partitions = 3; retentionMs = 86400000  },  # 1 day
     @{ name = "transactions.enriched";     partitions = 1; retentionMs = 604800000 },  # 7 days
-    @{ name = "transactions.scored.groq";  partitions = 1; retentionMs = 86400000  }   # 1 day (Layer 5b)
+    @{ name = "transactions.scored.groq";  partitions = 1; retentionMs = 86400000  },  # 1 day (Layer 5b)
+    @{ name = "transactions.feedback";      partitions = 1; retentionMs = 2592000000 } # 30 days (analyst verdicts / retraining labels)
 )
 
 foreach ($t in $topics) {

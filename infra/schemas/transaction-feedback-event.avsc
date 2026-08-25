@@ -1,0 +1,17 @@
+{
+  "type": "record",
+  "name": "TransactionFeedbackEvent",
+  "namespace": "com.velocityfraud.feedback",
+  "doc": "An analyst's ground-truth verdict on a scored transaction. Produced to topic transactions.feedback to close the human-in-the-loop feedback loop (labels for retraining + model-agreement metrics).",
+  "fields": [
+    { "name": "event_id",          "type": "string", "doc": "The scored TransactionEvent this verdict is about." },
+    { "name": "analyst_name",      "type": "string", "default": "unknown", "doc": "Who gave the verdict." },
+    { "name": "analyst_role",      "type": "string", "default": "analyst", "doc": "'analyst' | 'system'." },
+    { "name": "model_decision",    "type": { "type": "enum", "name": "FeedbackModelDecision", "symbols": ["ALLOW", "REVIEW", "BLOCK"] }, "doc": "What the model decided at scoring time." },
+    { "name": "model_fraud_score", "type": "double", "doc": "The model's fraud probability at scoring time." },
+    { "name": "analyst_verdict",   "type": { "type": "enum", "name": "AnalystVerdict", "symbols": ["FRAUD", "LEGIT"] }, "doc": "The human ground-truth label." },
+    { "name": "model_agreed",      "type": "boolean", "doc": "TRUE if the model's flag (REVIEW/BLOCK = fraud, ALLOW = legit) matched the analyst verdict." },
+    { "name": "notes",             "type": "string", "default": "", "doc": "Free-text analyst notes." },
+    { "name": "submitted_at_ms",   "type": "long",   "doc": "Epoch ms when the verdict was recorded." }
+  ]
+}
