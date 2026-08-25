@@ -27,10 +27,14 @@ from __future__ import annotations
 import os
 from typing import TYPE_CHECKING
 
+from dotenv import load_dotenv
 from loguru import logger
 
 if TYPE_CHECKING:
     from velocityfraud.explainer import FeatureContribution
+
+# Load .env so GEMINI_API_KEY is picked up when run outside a shell that exports it.
+load_dotenv()
 
 
 # ---------------------------------------------------------------------------
@@ -38,7 +42,7 @@ if TYPE_CHECKING:
 # ---------------------------------------------------------------------------
 NARRATOR_MODE = os.getenv("NARRATOR_MODE", "auto").lower()
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash-exp")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.5-flash")
 GEMINI_TIMEOUT_S = float(os.getenv("GEMINI_TIMEOUT_S", "5.0"))
 
 
