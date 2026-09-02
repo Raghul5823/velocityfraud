@@ -98,7 +98,7 @@ and any obviously suspicious merchant names.
 
 | Guarantee | How Enforced |
 |-----------|--------------|
-| **Free-tier only** | `GROQ_MODEL` pinned to `llama-3.1-8b-instant` (free). No paid models default. |
+| **Free-tier only** | `GROQ_MODEL` pinned to `qwen/qwen3.8-27b` (free; see §14.1 — Groq retired the original `llama-3.1-8b-instant` model entirely). No paid models default. |
 | **Rate-limited** | `RateLimiter` class — sliding 60s window, max **25 req/min** (Groq free tier is ~30). Blocks if exceeded. |
 | **Fail-safe** | If Groq API errors: log warning, **skip event** — pipeline never crashes |
 | **Env-gated** | Refuses to start if `GROQ_API_KEY` is missing. Clear error message. |
@@ -177,7 +177,7 @@ Groq tends to be **more conservative** — it flags more borderline cases as REV
 > "Fraud detection has two failure modes: false negatives (fraud gets through) and false positives (customer blocked wrongly). A single scorer can't optimize both. So we run **two scorers in parallel**:
 >
 > — **XGBoost** — trained on 50k historical frauds, fast, cheap, but purely statistical
-> — **Groq LLM (llama-3.1-8b)** — natural-language reasoning, catches novel patterns the statistical model doesn't see, but slower and rate-limited
+> — **Groq LLM (qwen3.8-27b, see §14.1)** — natural-language reasoning, catches novel patterns the statistical model doesn't see, but slower and rate-limited
 >
 > An analyst reviews cases where they **disagree** — that's where the highest-value signal lives."
 
@@ -237,7 +237,7 @@ XGBoost handles the volume; Groq inspects the flagged edge cases.
 ## 10. Presentation Q&A Cheat Sheet (Anticipated 15 Questions)
 
 1. **What is Groq?** → An LPU (Language Processing Unit) inference service. Runs open LLMs like Llama 3.1 at ~200 tokens/sec, much faster than GPU inference for the same model.
-2. **Why free-tier?** → Zero cost commitment. Free tier allows ~30 req/min for llama-3.1-8b-instant, which is enough for POC + comparison demos.
+2. **Why free-tier?** → Zero cost commitment. Free tier allows ~25 req/min for the current model (§14.1), which is enough for POC + comparison demos.
 3. **How is Groq different from Gemini (Layer 4)?** → Gemini narrates *why* the XGBoost model flagged a transaction (post-hoc explanation). Groq **is itself a scorer** — it makes the decision.
 4. **Is the LLM better than XGBoost?** → Different, not better. XGBoost wins on speed/cost/consistency. LLM wins on reasoning about novel patterns not in training data.
 5. **How do you know the LLM isn't just guessing?** → Deterministic (`temperature=0`), JSON-forced output, and we can inspect its stated reason. If reason is nonsense, the score should be ignored.
@@ -301,3 +301,12 @@ All roadmap items. Current layer proves the **capability + comparison story**.
 - [x] All 5 L5b health checks PASS
 - [x] XGBoost path still works unchanged (non-breaking)
 - [x] Free-tier only (no paid model usage possible)
+
+---
+
+## 14.1 Final-Term Correction — Groq Retired `llama-3.1-8b-instant` (2026-09-02)
+
+Discovered live while generating drift-detection test data: the original `llama-3.1-8b-instant` model returns `404 model_not_found` — Groq removed the entire Llama lineup from its catalog, not just renamed it (confirmed via `GET /openai/v1/models`, which now lists `openai/gpt-oss-*`, `qwen/*`, `groq/compound*`, no Llama models at all). This is the same category of external-provider deprecation already hit and documented once before with Gemini (`gemini-2.0-flash-exp` → `gemini-3.5-flash`, see `narrator.py`).
+
+**Fix:** `GROQ_MODEL` default changed to `qwen/qwen3.8-27b`, verified directly against Groq's API to correctly support `response_format={"type": "json_object"}` (the mode `groq_scorer.py` requires) — a candidate replacement, `openai/gpt-oss-20b`, was tried first and returned empty completions under the same JSON-mode request, so it was rejected rather than assumed to work.
+

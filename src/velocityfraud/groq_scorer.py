@@ -35,7 +35,9 @@ Usage (from velocityfraud/ root):
 
 Env vars:
     GROQ_API_KEY            (required) — free-tier key from console.groq.com
-    GROQ_MODEL              (default: llama-3.1-8b-instant)
+    GROQ_MODEL              (default: qwen/qwen3.8-27b -- llama-3.1-8b-instant
+                             was removed from Groq's catalog entirely, not
+                             just renamed; see docs/LAYER_5B_GROQ_SCORING.md)
     GROQ_MAX_RPM            (default: 25)   — soft rate cap
     GROQ_TIMEOUT_SEC        (default: 15)
     GROQ_SCORER_MAX_EVENTS  (default: 0 = no cap)
@@ -73,7 +75,7 @@ load_dotenv()
 # Configuration
 # ---------------------------------------------------------------------------
 API_KEY = os.getenv("GROQ_API_KEY", "").strip()
-MODEL = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant").strip()
+MODEL = os.getenv("GROQ_MODEL", "qwen/qwen3.8-27b").strip()
 MAX_RPM = int(os.getenv("GROQ_MAX_RPM", "25"))
 TIMEOUT_SEC = float(os.getenv("GROQ_TIMEOUT_SEC", "15"))
 
@@ -197,6 +199,33 @@ def call_groq(client, event: dict) -> tuple[float, str]:
 
 
 # ---------------------------------------------------------------------------
+# Pre-warm heartbeat — closes proposal gap B9 (docs/proposal_gap_remediation.md).
+# Proposal §11 Risk 8: "Groq free tier latency inconsistent on demo day...
+# Pre-warm endpoint via heartbeat." A cold Groq connection's first real call
+# can carry extra TLS/connection-setup latency; one cheap, throwaway call at
+# startup absorbs that cost before any real transaction is scored.
+# ---------------------------------------------------------------------------
+def prewarm(client) -> float:
+    """Fire one minimal, cheap completion to warm the connection. Best-effort —
+    never raises; a failed pre-warm just means the first real call pays the
+    cold-start cost instead, it does not block startup."""
+    t0 = time.monotonic()
+    try:
+        client.chat.completions.create(
+            model=MODEL,
+            messages=[{"role": "user", "content": "ping"}],
+            max_tokens=1,
+            timeout=TIMEOUT_SEC,
+        )
+        elapsed_ms = (time.monotonic() - t0) * 1000.0
+        logger.info("Groq pre-warm heartbeat OK ({:.0f} ms)", elapsed_ms)
+        return elapsed_ms
+    except Exception as e:
+        logger.warning("Groq pre-warm heartbeat failed (non-fatal): {}", str(e)[:120])
+        return -1.0
+
+
+# ---------------------------------------------------------------------------
 # Decision policy — SAME thresholds as XGBoost path for apples-to-apples.
 # ---------------------------------------------------------------------------
 def decide(score: float) -> str:
@@ -259,6 +288,7 @@ def main() -> int:
         return 2
 
     client = Groq(api_key=API_KEY)
+    prewarm(client)
 
     logger.info("Loading Avro schemas...")
     raw_schema = get_schema()
@@ -275,6 +305,7 @@ def main() -> int:
         "group.id": GROUP,
         "auto.offset.reset": FROM,
         "enable.auto.commit": True,
+        "isolation.level": "read_committed",
         "client.id": "velocityfraud-groq-scorer",
     })
     consumer.subscribe([IN_TOPIC])
