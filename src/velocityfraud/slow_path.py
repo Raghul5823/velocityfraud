@@ -44,6 +44,7 @@ from loguru import logger
 from velocityfraud.explainer import explain_event, get_explainer
 from velocityfraud.live_features import featurize_event
 from velocityfraud.narrator import generate_narrative
+from velocityfraud.narrative_grader import grade_narrative
 from velocityfraud.schema import get_enriched_schema, get_scored_schema
 
 
@@ -126,6 +127,7 @@ def main() -> int:
         "group.id": GROUP,
         "auto.offset.reset": FROM,
         "enable.auto.commit": True,
+        "isolation.level": "read_committed",
         "client.id": "velocityfraud-slowpath",
     })
     consumer.subscribe([IN_TOPIC])
@@ -196,6 +198,16 @@ def main() -> int:
                 X, _completeness = featurize_event(scored)
                 contribs = explain_event(explainer, X, top_n=TOP_N)
                 narrative, mode_used = generate_narrative(scored, contribs)
+
+                # AI-validates-AI (proposal Section 10.3): a second, independent
+                # Gemini call grades this narrative against the raw SHAP values.
+                # A failing narrative is dropped (emptied), never shown to
+                # analysts — it is NOT re-generated or retried.
+                grade = grade_narrative(contribs, narrative, mode_used)
+                if not grade.passed:
+                    logger.warning("Narrative FAILED grading for event={} ({}): dropping.",
+                                   scored.get("event_id", "?")[:8], grade.reason)
+                    narrative = ""
             except Exception as e:
                 n_explain_fail += 1
                 logger.error("Enrichment failed for event={}: {}",
@@ -211,6 +223,7 @@ def main() -> int:
                 "top_contributors":     [fc.as_dict() for fc in contribs],
                 "narrative":            narrative,
                 "narrator_mode":        mode_used,
+                "narrative_grading_passed": grade.passed,
                 "enriched_at_ms":       enriched_at_ms,
                 "enrichment_latency_ms":int(round(enrichment_latency_ms)),
             }

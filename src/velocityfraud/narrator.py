@@ -25,8 +25,10 @@ Smoke test:
 from __future__ import annotations
 
 import os
+from functools import lru_cache
 from typing import TYPE_CHECKING
 
+import redis
 from dotenv import load_dotenv
 from loguru import logger
 
@@ -44,6 +46,38 @@ NARRATOR_MODE = os.getenv("NARRATOR_MODE", "auto").lower()
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.5-flash")
 GEMINI_TIMEOUT_S = float(os.getenv("GEMINI_TIMEOUT_S", "5.0"))
+
+# Narrative pre-cache — closes proposal gap B10 (docs/proposal_gap_remediation.md).
+# Proposal §11 Risk 9: "Gemini free quota exhausted before demo day -> cache
+# last successful narrative for each scenario pre-demo." A long TTL (default
+# 24h) deliberately spans a rehearsal-to-live-demo gap, unlike the 1-min
+# score cache (score_cache.py), which is about duplicate-request dedup, not
+# demo-day resilience.
+NARRATIVE_CACHE_TTL_S = int(os.getenv("NARRATIVE_CACHE_TTL_S", str(24 * 3600)))
+REDIS_HOST = os.getenv("REDIS_HOST", "localhost")
+REDIS_PORT = int(os.getenv("REDIS_PORT", "6379"))
+REDIS_DB = int(os.getenv("REDIS_DB", "0"))
+
+
+@lru_cache(maxsize=1)
+def _cache_client() -> redis.Redis:
+    return redis.Redis(host=REDIS_HOST, port=REDIS_PORT, db=REDIS_DB,
+                        socket_timeout=0.5, socket_connect_timeout=0.5,
+                        decode_responses=True)
+
+
+def _narrative_cache_get(event_id: str) -> str | None:
+    try:
+        return _cache_client().get(f"nc:{event_id}")
+    except redis.RedisError:
+        return None
+
+
+def _narrative_cache_set(event_id: str, text: str) -> None:
+    try:
+        _cache_client().set(f"nc:{event_id}", text, ex=NARRATIVE_CACHE_TTL_S)
+    except redis.RedisError:
+        pass  # best-effort; a failed cache write never blocks narration
 
 
 # ---------------------------------------------------------------------------
@@ -208,14 +242,21 @@ def generate_narrative(
     mode_used is 'TEMPLATE' or 'GEMINI' — matches the NarratorMode Avro enum.
     """
     chosen = (mode or NARRATOR_MODE).lower()
+    event_id = scored_event.get("event_id", "")
 
     if chosen in ("gemini", "auto") and GEMINI_API_KEY:
         try:
             text = _gemini_narrate(scored_event, contributions)
+            if event_id:
+                _narrative_cache_set(event_id, text)
             return text, "GEMINI"
         except Exception as e:
-            logger.warning("Gemini narration failed ({}): falling back to template", e)
-            # fall through to template
+            logger.warning("Gemini narration failed ({}): checking narrative pre-cache", e)
+            cached = _narrative_cache_get(event_id) if event_id else None
+            if cached:
+                logger.info("Serving pre-cached narrative for event_id={} (quota/API issue)", event_id[:12])
+                return cached, "GEMINI_CACHED"
+            # no cache entry either -> fall through to template
 
     return _template_narrate(scored_event, contributions), "TEMPLATE"
 

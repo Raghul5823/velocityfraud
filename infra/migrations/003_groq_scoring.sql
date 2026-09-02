@@ -50,6 +50,14 @@ CREATE INDEX IF NOT EXISTS idx_groq_score       ON scored_events_groq(fraud_scor
 
 -- ---------------------------------------------------------------------------
 -- View: side-by-side comparison of XGBoost vs Groq on the same event
+--
+-- scored_at_ms is included here (not just added later in
+-- 005_drift_detection.sql) because migrations are replayed from 001 in
+-- order on every consumer startup (see db.py::apply_migrations) -- if this
+-- file defined a SHORTER view than what 005 later replaces it with,
+-- replaying 003 after 005 has already run would try to DROP a trailing
+-- column via CREATE OR REPLACE VIEW, which Postgres refuses outright. Both
+-- migrations must agree on the same final shape.
 -- ---------------------------------------------------------------------------
 CREATE OR REPLACE VIEW scorer_comparison AS
 SELECT
@@ -72,6 +80,10 @@ SELECT
 
     -- Agreement
     (x.decision = g.decision)               AS decisions_agree,
-    ABS(x.fraud_score - g.fraud_score)      AS score_diff
+    ABS(x.fraud_score - g.fraud_score)      AS score_diff,
+
+    -- Added in 005_drift_detection.sql for windowed drift detection; kept
+    -- here too so 003 and 005 never disagree on the view's shape.
+    x.scored_at_ms
 FROM scored_events x
 INNER JOIN scored_events_groq g ON g.event_id = x.event_id;

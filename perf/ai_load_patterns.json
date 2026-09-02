@@ -1,0 +1,97 @@
+{
+  "patterns": [
+    {
+      "name": "flash_sale_spike",
+      "description": "A flash-sale traffic spike: normal steady baseline traffic, then a sudden, sharp spike to peak load within seconds (shoppers all hitting checkout the instant a sale goes live), holding near peak briefly, then a fast taper back toward baseline as the initial rush subsides.",
+      "mode": "GEMINI",
+      "stages": [
+        {
+          "duration_s": 30,
+          "target_rate": 20
+        },
+        {
+          "duration_s": 5,
+          "target_rate": 280
+        },
+        {
+          "duration_s": 15,
+          "target_rate": 280
+        },
+        {
+          "duration_s": 20,
+          "target_rate": 80
+        },
+        {
+          "duration_s": 25,
+          "target_rate": 20
+        },
+        {
+          "duration_s": 25,
+          "target_rate": 15
+        }
+      ]
+    },
+    {
+      "name": "slow_leak_ddos",
+      "description": "A slow-leak DDoS-style ramp: traffic creeps up gradually and almost imperceptibly over a long period rather than spiking, designed to evade threshold-based alerting by never crossing an obvious single-step jump, eventually reaching a sustained elevated plateau well above normal baseline.",
+      "mode": "GEMINI",
+      "stages": [
+        {
+          "duration_s": 30,
+          "target_rate": 20
+        },
+        {
+          "duration_s": 30,
+          "target_rate": 60
+        },
+        {
+          "duration_s": 30,
+          "target_rate": 120
+        },
+        {
+          "duration_s": 30,
+          "target_rate": 200
+        },
+        {
+          "duration_s": 30,
+          "target_rate": 200
+        },
+        {
+          "duration_s": 30,
+          "target_rate": 20
+        }
+      ]
+    },
+    {
+      "name": "mixed_currency_surge",
+      "description": "A mixed-currency cross-border surge: multiple shorter bursts of moderate load in succession (representing waves of international traffic across different time zones/currencies going live in sequence), each burst rising and falling before the next begins, rather than one single sustained peak.",
+      "mode": "GEMINI",
+      "stages": [
+        {
+          "duration_s": 25,
+          "target_rate": 20
+        },
+        {
+          "duration_s": 25,
+          "target_rate": 150
+        },
+        {
+          "duration_s": 25,
+          "target_rate": 30
+        },
+        {
+          "duration_s": 25,
+          "target_rate": 170
+        },
+        {
+          "duration_s": 25,
+          "target_rate": 30
+        },
+        {
+          "duration_s": 25,
+          "target_rate": 15
+        }
+      ]
+    }
+  ]
+}
