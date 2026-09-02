@@ -120,9 +120,10 @@ _BASE_EVENT: dict = {
 
 
 def test_scored_row_length():
-    """_scored_row must produce a 26-element tuple matching INSERT_SCORED_SQL columns."""
+    """_scored_row must produce a 29-element tuple matching INSERT_SCORED_SQL columns
+    (26 original + velocity_hit/velocity_window/velocity_reason, Layer 8b)."""
     row = _scored_row(_BASE_EVENT)
-    assert len(row) == 26
+    assert len(row) == 29
 
 
 def test_scored_row_event_id_is_first():
@@ -136,6 +137,14 @@ def test_scored_row_blocklist_defaults():
     assert row[23] is False    # blocklist_hit
     assert row[24] == "NONE"   # blocklist_tier
     assert row[25] == ""       # blocklist_reason
+
+
+def test_scored_row_velocity_defaults():
+    """Events with no velocity fields get safe defaults: False / empty / empty (Layer 8b)."""
+    row = _scored_row(_BASE_EVENT)
+    assert row[26] is False    # velocity_hit
+    assert row[27] == ""       # velocity_window
+    assert row[28] == ""       # velocity_reason
 
 
 def test_groq_row_length():
