@@ -132,6 +132,7 @@ def main() -> int:
         "group.id": GROUP,
         "auto.offset.reset": FROM,
         "enable.auto.commit": True,
+        "isolation.level": "read_committed",
         "client.id": "velocityfraud-text-anomaly",
     })
     consumer.subscribe([IN_TOPIC])

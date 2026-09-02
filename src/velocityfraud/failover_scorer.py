@@ -374,6 +374,7 @@ def main() -> int:
         "group.id": GROUP,
         "auto.offset.reset": FROM,
         "enable.auto.commit": True,
+        "isolation.level": "read_committed",
         "client.id": f"velocityfraud-failover-{ROLE}",
     })
     consumer.subscribe([IN_TOPIC])

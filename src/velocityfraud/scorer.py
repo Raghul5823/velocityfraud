@@ -44,6 +44,8 @@ from confluent_kafka import Consumer, KafkaError, Producer
 from loguru import logger
 
 from velocityfraud import blocklist  # Layer 8 blocklist pre-filter
+from velocityfraud import velocity  # Layer 8b velocity pre-filter
+from velocityfraud import score_cache  # score cache (Risk #1 mitigation)
 from velocityfraud.live_features import featurize_event
 from velocityfraud.predict import (
     get_champion_filename,
@@ -153,6 +155,7 @@ def main() -> int:
         "group.id": GROUP,
         "auto.offset.reset": FROM,
         "enable.auto.commit": True,
+        "isolation.level": "read_committed",
         "client.id": "velocityfraud-scorer",
     })
     consumer.subscribe([IN_TOPIC])
@@ -182,6 +185,7 @@ def main() -> int:
     # Layer 8 stats
     n_blocklist_hits = 0
     n_hotlist_hits = 0
+    n_velocity_hits = 0
     latency_sum_ms = 0.0
     latency_max_ms = 0.0
     start_time = time.monotonic()
@@ -209,6 +213,7 @@ def main() -> int:
                 continue
 
             # ---- Layer 8: Blocklist check FIRST (fail-open on Redis error) ----
+            v_result = velocity.VelocityResult()  # default no-hit; overwritten below if checked
             bl_result = blocklist.check(
                 card_token=event.get("card_token"),
                 merchant_id_hash=event.get("merchant_id_hash"),
@@ -229,16 +234,34 @@ def main() -> int:
                 decision = "REVIEW"
                 n_hotlist_hits += 1
             else:
-                # No blocklist hit -> run ML normally
-                try:
-                    X, completeness = featurize_event(event)
-                    score = float(predict_proba(model, X)[0])
-                    decision = decide(score)
-                except Exception as e:
-                    n_score_fail += 1
-                    logger.error("Scoring failed for event={}: {}",
-                                 event.get("event_id", "?")[:8], e)
-                    continue
+                # ---- Layer 8b: velocity pre-filter (fail-open on Redis error) ----
+                v_result = velocity.check(
+                    card_token=event.get("card_token"),
+                    event_id=event.get("event_id", ""),
+                )
+                if v_result.hit:
+                    # Card-testing burst detected: skip ML, force REVIEW.
+                    score = 0.5
+                    completeness = 0.0
+                    decision = "REVIEW"
+                    n_velocity_hits += 1
+                else:
+                    # No blocklist or velocity hit -> run ML normally (cached if possible)
+                    try:
+                        X, completeness = featurize_event(event)
+                        h = score_cache.feature_hash(X)
+                        cached = score_cache.get(h)
+                        if cached.hit:
+                            score, decision = cached.fraud_score, cached.decision
+                        else:
+                            score = float(predict_proba(model, X)[0])
+                            decision = decide(score)
+                            score_cache.set(h, score, decision)
+                    except Exception as e:
+                        n_score_fail += 1
+                        logger.error("Scoring failed for event={}: {}",
+                                     event.get("event_id", "?")[:8], e)
+                        continue
 
             scored_at_ms = int(time.time() * 1000)
             latency_ms = (time.monotonic() - t_start) * 1000.0
@@ -257,6 +280,10 @@ def main() -> int:
                 "blocklist_hit":        bl_result.hit,
                 "blocklist_tier":       bl_result.tier.value,
                 "blocklist_reason":     bl_result.reason,
+                # Layer 8b fields (defaults if not hit)
+                "velocity_hit":         v_result.hit,
+                "velocity_window":      v_result.window,
+                "velocity_reason":      v_result.reason,
             }
 
             # Encode + produce
@@ -323,6 +350,9 @@ def main() -> int:
         logger.info("  Hot-list hits (REVIEW)  : {} ({:.1%})",
                     n_hotlist_hits,
                     n_hotlist_hits / n_in if n_in else 0)
+        logger.info("  Velocity hits (REVIEW)  : {} ({:.1%})",
+                    n_velocity_hits,
+                    n_velocity_hits / n_in if n_in else 0)
         logger.info("  Decision: BLOCK         : {} ({:.1%})",
                     decision_counts["BLOCK"],
                     decision_counts["BLOCK"] / n_in if n_in else 0)

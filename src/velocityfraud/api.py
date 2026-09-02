@@ -32,6 +32,8 @@ from loguru import logger
 from pydantic import BaseModel, Field
 
 from velocityfraud import blocklist
+from velocityfraud import velocity
+from velocityfraud import score_cache
 from velocityfraud.live_features import featurize_event
 from velocityfraud.predict import (
     get_champion_filename,
@@ -97,6 +99,9 @@ class ScoreOut(BaseModel):
     blocklist_hit: bool
     blocklist_tier: str
     blocklist_reason: str
+    velocity_hit: bool
+    velocity_window: str
+    velocity_reason: str
 
 
 # ---------------------------------------------------------------------------
@@ -175,14 +180,33 @@ def score(txn: TransactionIn) -> ScoreOut:
             device_hash=event.get("device_fingerprint_hash") or None,
         )
 
+    v = velocity.VelocityResult()  # default no-hit; overwritten below if checked
+
     if bl.hit and bl.tier == blocklist.Tier.BLOCK:
         score_val, completeness, decision = 1.0, 0.0, "BLOCK"
     elif bl.hit and bl.tier == blocklist.Tier.HOT:
         score_val, completeness, decision = 0.5, 0.0, "REVIEW"
     else:
-        X, completeness = featurize_event(event)
-        score_val = float(predict_proba(_state["model"], X)[0])
-        decision = decide(score_val)
+        # Layer 8b velocity pre-filter (fail-open on Redis error, same slot as blocklist).
+        v = velocity.check(
+            card_token=event.get("card_token") or None,
+            event_id=event.get("event_id", ""),
+        )
+        if v.hit:
+            score_val, completeness, decision = 0.5, 0.0, "REVIEW"
+        else:
+            X, completeness = featurize_event(event)
+            # Score cache (proposal Risk #1 mitigation): identical feature
+            # vectors within the TTL window skip re-inference. Fail-open —
+            # a cache miss or Redis hiccup just means "score it fresh".
+            h = score_cache.feature_hash(X)
+            cached = score_cache.get(h)
+            if cached.hit:
+                score_val, decision = cached.fraud_score, cached.decision
+            else:
+                score_val = float(predict_proba(_state["model"], X)[0])
+                decision = decide(score_val)
+                score_cache.set(h, score_val, decision)
 
     latency_ms = (time.perf_counter() - t_start) * 1000.0
     return ScoreOut(
@@ -196,4 +220,7 @@ def score(txn: TransactionIn) -> ScoreOut:
         blocklist_hit=bl.hit,
         blocklist_tier=bl.tier.value,
         blocklist_reason=bl.reason,
+        velocity_hit=v.hit,
+        velocity_window=v.window,
+        velocity_reason=v.reason,
     )

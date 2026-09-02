@@ -31,6 +31,10 @@
 
     { "name": "blocklist_hit",            "type": "boolean", "default": false, "doc": "TRUE if this event matched an entity on the Layer 8 Redis blocklist (card / merchant / IP / device). When TRUE, ML scoring was skipped." },
     { "name": "blocklist_tier",           "type": { "type": "enum", "name": "BlocklistTier", "symbols": ["NONE", "HOT", "BLOCK"] }, "default": "NONE", "doc": "NONE = no blocklist match, ML ran normally. HOT = hot-list match, decision elevated to REVIEW. BLOCK = blocklist match, decision forced to BLOCK." },
-    { "name": "blocklist_reason",         "type": "string",  "default": "",    "doc": "Human-readable reason if blocklist_hit=TRUE (e.g., 'card_token=abc: 4 prior BLOCKs in 22h'). Empty string when no hit." }
+    { "name": "blocklist_reason",         "type": "string",  "default": "",    "doc": "Human-readable reason if blocklist_hit=TRUE (e.g., 'card_token=abc: 4 prior BLOCKs in 22h'). Empty string when no hit." },
+
+    { "name": "velocity_hit",             "type": "boolean", "default": false, "doc": "TRUE if this event tripped the Layer 8b Redis sliding-window velocity pre-filter (card-testing burst detection). When TRUE, ML scoring was skipped and decision forced to REVIEW." },
+    { "name": "velocity_window",          "type": "string",  "default": "",    "doc": "Which window tripped: '1min' | '10min' | '60min'. Empty string when no hit." },
+    { "name": "velocity_reason",          "type": "string",  "default": "",    "doc": "Human-readable reason if velocity_hit=TRUE (e.g., '6 txns on card in 1min (threshold 5)'). Empty string when no hit." }
   ]
 }

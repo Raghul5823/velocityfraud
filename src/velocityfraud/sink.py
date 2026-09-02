@@ -86,13 +86,15 @@ INSERT INTO scored_events (
     device_fingerprint_hash, geo_distance_km, source_label, schema_version,
     fraud_score, decision, model_name, model_version,
     scored_at_ms, scoring_latency_ms, feature_completeness,
-    blocklist_hit, blocklist_tier, blocklist_reason
+    blocklist_hit, blocklist_tier, blocklist_reason,
+    velocity_hit, velocity_window, velocity_reason
 ) VALUES (
     %s, %s, %s, %s,
     %s, %s, %s, %s,
     %s, %s, %s, %s,
     %s, %s, %s, %s,
     %s, %s, %s, %s,
+    %s, %s, %s,
     %s, %s, %s,
     %s, %s, %s
 )
@@ -106,7 +108,10 @@ ON CONFLICT (event_id) DO UPDATE SET
     feature_completeness = EXCLUDED.feature_completeness,
     blocklist_hit        = EXCLUDED.blocklist_hit,
     blocklist_tier       = EXCLUDED.blocklist_tier,
-    blocklist_reason     = EXCLUDED.blocklist_reason
+    blocklist_reason     = EXCLUDED.blocklist_reason,
+    velocity_hit         = EXCLUDED.velocity_hit,
+    velocity_window      = EXCLUDED.velocity_window,
+    velocity_reason      = EXCLUDED.velocity_reason
 WHERE EXCLUDED.scored_at_ms >= scored_events.scored_at_ms
 """
 
@@ -180,6 +185,10 @@ def _scored_row(ev: dict) -> tuple:
         ev.get("blocklist_hit", False),
         ev.get("blocklist_tier", "NONE"),
         ev.get("blocklist_reason", ""),
+        # Layer 8b fields (backward-compat default from Avro schema)
+        ev.get("velocity_hit", False),
+        ev.get("velocity_window", ""),
+        ev.get("velocity_reason", ""),
     )
 
 
@@ -249,6 +258,7 @@ def main() -> int:
         "group.id": GROUP,
         "auto.offset.reset": FROM,
         "enable.auto.commit": True,
+        "isolation.level": "read_committed",
         "client.id": "velocityfraud-sink",
     })
     consumer.subscribe([SCORED_TOPIC, ENRICHED_TOPIC, SCORED_GROQ_TOPIC])

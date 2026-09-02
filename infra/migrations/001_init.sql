@@ -56,6 +56,12 @@ ALTER TABLE scored_events ADD COLUMN IF NOT EXISTS blocklist_tier   VARCHAR(10);
 ALTER TABLE scored_events ADD COLUMN IF NOT EXISTS blocklist_reason TEXT;
 CREATE INDEX IF NOT EXISTS idx_scored_blocklist ON scored_events(blocklist_hit) WHERE blocklist_hit = TRUE;
 
+-- Layer 8b forward-compat columns — velocity pre-filter (nullable, same reasoning)
+ALTER TABLE scored_events ADD COLUMN IF NOT EXISTS velocity_hit    BOOLEAN;
+ALTER TABLE scored_events ADD COLUMN IF NOT EXISTS velocity_window VARCHAR(10);
+ALTER TABLE scored_events ADD COLUMN IF NOT EXISTS velocity_reason TEXT;
+CREATE INDEX IF NOT EXISTS idx_scored_velocity ON scored_events(velocity_hit) WHERE velocity_hit = TRUE;
+
 
 -- ---------------------------------------------------------------------------
 -- Table: enriched_events
