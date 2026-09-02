@@ -377,6 +377,20 @@ $env:SLOWPATH_MAX_EVENTS = "30"; .\scripts\run-slow-path.ps1
 
 ---
 
+## 10.5 Final-Term Addendum — Honest Correction: Databricks Trigger Type (2026-09-02)
+
+A full line-by-line audit against the proposal (see `docs/proposal_gap_remediation.md`, item B6) found a mismatch worth recording here.
+
+**The proposal claim (§5):** Spark Structured Streaming reads the slow path with `trigger=ProcessingTime("1 second")` — a continuous, always-on micro-batch every second.
+
+**What actually runs (`databricks/slow_path_notebook.py`):** `.trigger(availableNow=True)` — the job wakes up, processes everything currently sitting in the topic, and stops. Not a 24/7 stream.
+
+**Why this is the correct implementation, not a shortcut:** the proposal's own §13.1 feasibility section already commits to the real intent: *"Databricks is used for training (~6 sessions of 1-2 hrs) and slow-path micro-batch during demo (1-2 hrs total). Well under the 15 GB compute-hrs/mo free quota."* A literal continuous `ProcessingTime("1 second")` trigger, left running, would burn through Databricks Free Edition's entire monthly compute-hour allowance within days — directly contradicting the ₹800 budget ceiling in §6, which explicitly relies on Databricks staying inside its free quota all semester. `availableNow=True` delivers the same underlying intent — "process what's arrived, promptly, without idling compute continuously" — in a way that is actually compatible with the proposal's own cost model. The literal `ProcessingTime("1 second")` wording was never going to survive contact with the budget it was proposed alongside.
+
+**Recorded here, not silently left as an unexplained difference between the proposal text and the shipped notebook.**
+
+---
+
 ## 11. References & Further Reading
 
 - **SHAP documentation:** https://shap.readthedocs.io/

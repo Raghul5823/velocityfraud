@@ -392,6 +392,20 @@ Start-Process "http://localhost:8081/ui/clusters/velocityfraud-dev/all-topics/tr
 
 ---
 
+## 10.5 Final-Term Addendum — Honest Corrections & Additions (2026-09-02)
+
+A full line-by-line audit against the proposal (see `docs/proposal_gap_remediation.md`) found four things worth recording here rather than leaving implicit.
+
+**Addition — Layer 8b (velocity pre-filter).** The proposal described "sliding-window velocity counters (1-min, 10-min, 60-min)" as a model input computed inside Kafka Streams. That never existed. Rather than retrain the champion model this late (see the remediation doc for the full reasoning), velocity counting was implemented as a **live Redis pre-filter** (`velocity.py`) — architecturally the same slot Layer 8's blocklist already occupies, running immediately after it in both `scorer.py` and `api.py`. It uses a Redis sorted set per card (`vl:card:{token}`) with continuous eviction of stale entries — a genuine sliding window, not a fixed/tumbling one — and forces `REVIEW` when a card exceeds its threshold in any of the three windows. New Avro fields `velocity_hit` / `velocity_window` / `velocity_reason` mirror the existing `blocklist_*` fields exactly.
+
+**Addition — score cache.** Proposal Risk #1's mitigation ("cache scores for identical feature hashes, 1-min TTL") is now implemented (`score_cache.py`) — a small Redis GET/SET wrapper keyed by a SHA-256 hash of the feature vector, wired into the ML-scoring branch in both `scorer.py` and `api.py`, after the blocklist and velocity checks. Fail-open, same as every other Redis-backed component in this project.
+
+**Correction — shadow model architecture.** The proposal describes the shadow XGBoost model as running "in-broker via the Kafka Streams Processor API." The actual implementation (`failover_scorer.py`) is a separate Python process using Redis leader-election for hot-standby takeover — proven live in `demo-failover.ps1` (~2s promotion, no consumer-visible gap). No Kafka Streams/JVM topology exists anywhere in this codebase. This is judged a better real-world pattern (it's how production failover is commonly built), just not the one originally described — recorded here so the written spec matches what actually ships.
+
+**Correction — decision schema.** The proposal describes the two-tier output as binary `{accept, escalate}`. The actual, shipped decision schema is the three-way `ALLOW / REVIEW / BLOCK` used throughout this document, `feedback.py`, and every test in the suite. Read as a refinement of the original intent (`ALLOW` = accept, `REVIEW` + `BLOCK` = escalate, with `BLOCK` additionally carrying an automatic hard-stop action `REVIEW` alone doesn't), not a different feature.
+
+---
+
 ## 11. References & Further Reading
 
 - **Confluent Kafka consumer-group guide:** https://docs.confluent.io/platform/current/clients/consumer.html
