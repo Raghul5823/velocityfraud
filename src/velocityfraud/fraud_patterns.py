@@ -147,11 +147,34 @@ def explain_pattern(sc: Scenario) -> dict:
     if client is not None:
         try:
             prompt = _gemini_pattern_prompt(sc, score, decision, contribs)
-            resp = client.generate_content(prompt)
+            # DEMO path: generous budget on purpose (see narrator's
+            # GEMINI_DEMO_TIMEOUT_S). These 3 named scenarios are presented
+            # deliberately and are not measured against the streaming p95 SLO,
+            # so they are allowed the time a real Gemini call actually needs
+            # -- which is exactly why the live path gets a tighter budget.
+            resp = client.generate_content(
+                prompt,
+                request_options={"timeout": narrator.GEMINI_DEMO_TIMEOUT_S},
+            )
             text, mode = (resp.text or "").strip(), "GEMINI"
+            # Cache the win. Free-tier Gemini latency was measured swinging
+            # between 9 s and >60 s across runs (soft throttling), so any
+            # single run may lose the race on some scenarios. Caching each
+            # success means running this a few times before a demo
+            # progressively banks a REAL Gemini narrative for all three
+            # scenarios -- which is precisely what proposal Risk #9
+            # ("cache last successful narrative for each scenario pre-demo")
+            # asks for.
+            if text:
+                narrator._narrative_cache_set(sc.event["event_id"], text)
         except Exception as e:
-            logger.warning("Gemini failed ({}); using template.", e)
-            text, mode = _template_pattern_narrative(sc, score, decision, contribs), "TEMPLATE"
+            logger.warning("Gemini failed ({}); checking pre-cache.", str(e)[:100])
+            cached = narrator._narrative_cache_get(sc.event["event_id"])
+            if cached:
+                logger.info("Serving pre-cached Gemini narrative for {}.", sc.pattern)
+                text, mode = cached, "GEMINI_CACHED"
+            else:
+                text, mode = _template_pattern_narrative(sc, score, decision, contribs), "TEMPLATE"
     else:
         text, mode = _template_pattern_narrative(sc, score, decision, contribs), "TEMPLATE"
 
@@ -160,11 +183,35 @@ def explain_pattern(sc: Scenario) -> dict:
             "mode": mode, "narrative": text, "completeness": completeness}
 
 
+def _prewarm_gemini() -> None:
+    """Absorb Gemini's cold-start cost before the three real scenarios run.
+
+    Measured: the FIRST Gemini call of a session took >60 s and fell back to
+    template, while the second and third took ~9 s and ~32 s. Same cold-start
+    behaviour the Groq path already handles with a heartbeat (proposal Risk
+    #8), so it gets the same treatment here -- one throwaway call so the three
+    presented scenarios all get genuine Gemini output instead of the first one
+    losing a race it was never going to win.
+    """
+    client = narrator._get_gemini_client()
+    if client is None:
+        return
+    try:
+        client.generate_content(
+            "ping",
+            request_options={"timeout": narrator.GEMINI_DEMO_TIMEOUT_S},
+        )
+        logger.info("Gemini pre-warm OK.")
+    except Exception as e:
+        logger.warning("Gemini pre-warm failed (non-fatal): {}", str(e)[:120])
+
+
 def main() -> int:
     logger.info("=" * 74)
     logger.info("THREE FRAUD-PATTERN EXPLANATIONS (Item 5)")
     logger.info("Narrator mode: {}", "GEMINI" if narrator.GEMINI_API_KEY else "TEMPLATE (set GEMINI_API_KEY for LLM)")
     logger.info("=" * 74)
+    _prewarm_gemini()
     for sc in SCENARIOS:
         r = explain_pattern(sc)
         logger.info("-" * 74)

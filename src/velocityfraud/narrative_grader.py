@@ -106,7 +106,16 @@ def grade_narrative(
                            reason="Gemini unavailable for grading — word-count check only")
 
     try:
-        resp = client.generate_content(_grading_prompt(contributions, narrative))
+        # Bounded to the same tight live-path budget as narration itself.
+        # This grader runs INSIDE slow_path.py, so an unbounded call here would
+        # breach the 2 s slow-path SLO just as narration did -- it was
+        # previously unbounded, which is a second contributor to the measured
+        # 11,296 ms worst case. Uses narrator's shared pool + deadline.
+        resp = narrator._gemini_pool().submit(
+            client.generate_content,
+            _grading_prompt(contributions, narrative),
+            request_options={"timeout": narrator.GEMINI_TIMEOUT_S},
+        ).result(timeout=narrator.GEMINI_TIMEOUT_S)
         cleaned = re.sub(r"^```(json)?|```$", "", (resp.text or "").strip(), flags=re.MULTILINE).strip()
         verdict = json.loads(cleaned)
         factual = bool(verdict.get("factual", False))

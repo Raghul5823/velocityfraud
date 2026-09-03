@@ -150,12 +150,12 @@ INSERT INTO enriched_events (
     event_id, customer_id, amount, merchant_name, mcc,
     fraud_score, decision, feature_completeness,
     top_contributors, narrative, narrator_mode,
-    enriched_at_ms, enrichment_latency_ms
+    enriched_at_ms, enrichment_latency_ms, narrative_grading_passed
 ) VALUES (
     %s, %s, %s, %s, %s,
     %s, %s, %s,
     %s, %s, %s,
-    %s, %s
+    %s, %s, %s
 )
 ON CONFLICT (event_id) DO UPDATE SET
     fraud_score           = EXCLUDED.fraud_score,
@@ -165,7 +165,8 @@ ON CONFLICT (event_id) DO UPDATE SET
     narrative             = EXCLUDED.narrative,
     narrator_mode         = EXCLUDED.narrator_mode,
     enriched_at_ms        = EXCLUDED.enriched_at_ms,
-    enrichment_latency_ms = EXCLUDED.enrichment_latency_ms
+    enrichment_latency_ms = EXCLUDED.enrichment_latency_ms,
+    narrative_grading_passed = EXCLUDED.narrative_grading_passed
 WHERE EXCLUDED.enriched_at_ms >= enriched_events.enriched_at_ms
 """
 
@@ -213,6 +214,9 @@ def _enriched_row(ev: dict) -> tuple:
         json.dumps(ev["top_contributors"]),  # JSONB column
         ev["narrative"], ev["narrator_mode"],
         ev["enriched_at_ms"], ev["enrichment_latency_ms"],
+        # Real bug fix (2026-09-02): this field existed on the Avro schema and
+        # slow_path.py's output but was never persisted -- see 006_narrative_grading.sql.
+        ev.get("narrative_grading_passed", True),
     )
 
 
