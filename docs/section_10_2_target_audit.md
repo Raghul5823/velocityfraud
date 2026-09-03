@@ -217,3 +217,27 @@ calculated column that cannot fold to SQL fails at refresh rather than degrading
 | Model Accuracy F1 target | ✅ Analysed and documented; not closeable (1.37× model ceiling) |
 | Model Accuracy FPR target | ✅ Analysed; closeable by config if graded strictly, at 509 frauds' cost |
 | Everything else in the table | ✅ Met, or documented deviation above |
+
+---
+
+## §10 — A methodology lesson this audit surfaced, worth stating plainly
+
+While re-measuring the slow-path SLO for §7, replaying real traffic through the pipeline exposed a
+**critical defect in the score cache** (finding B7 in `proposal_gap_remediation.md`): `feature_hash()`
+hashed a pandas DataFrame's *column names* instead of its *values*, so every transaction collapsed to
+one cache key — after the first transaction was scored, every other transaction scored within the next
+60 seconds silently received that first transaction's score and decision.
+
+The reason this matters beyond the fix itself: B7 had already been marked "✅ Fixed" earlier in this
+project, with a stated live-verification — "identical `fraud_score` on repeat calls." That test was
+real and passed honestly, but it could not have caught this bug, because **repeating the same event
+looks correct whether the cache is keyed on its values or on something constant** — the failure mode
+only appears with *two different* events inside the same cache window. It was found only because a
+test happened to run two structurally different transactions close together and one came back with
+the wrong decision.
+
+**The general lesson, applicable beyond this one bug:** a live-verification check proves what it
+actually exercises, not the whole claim it is attached to. "Same input twice gives the same output" is
+a much weaker property than "different inputs give different, correct outputs" — and a checklist that
+only tests the former can carry a real defect for weeks marked done. Recorded here rather than only in
+the fix's commit message, because it is the kind of finding worth being able to point to directly.
