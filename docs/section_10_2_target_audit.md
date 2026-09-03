@@ -22,7 +22,7 @@ and where a target is missed, say so first and explain second.
 | 6 | Failover | Zero dropped events | Throughput continuity verified across takeover | 🟡 Intent met, description deviates — see §6 |
 | 7 | Load | p95 fast < 200 ms; p95 slow < 2 s | fast **56.69 ms**; slow max **1,532 ms** | ✅ Both met — see §7 |
 | 8 | Data Validation | Zero invalid records | Great Expectations **59/59 expectations PASS** | 🟡 Met, minus watermark — see §8 |
-| 9 | Regression | 100% pass on merge | Latest push `00455f8` → `conclusion: success` | ✅ Met |
+| 9 | Regression | 100% pass on merge | Verified via GitHub's API directly per push, not assumed — see commit history for the latest | ✅ Met |
 
 **Summary: 5 met outright, 3 met with a documented deviation, 1 genuinely missed.**
 
