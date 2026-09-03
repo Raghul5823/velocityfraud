@@ -53,15 +53,7 @@ The proposal (Risk #6) named Oracle Cloud Always Free (Ampere A1, ARM) as primar
 
 - **How the connection actually works:** `ssh -i <keyfile> root@<public IP>`. The `-i` flag tells the SSH client which private key to offer. The server checks it against the public key it was given at creation — if they match, the session opens with no password prompt.
 
-## 5. Division of Responsibility (as actually followed)
-
-| Task | Who | Why |
-|---|---|---|
-| Create `vf-demo` / `vf-loadgen`, delete both at the end | 🧑 Human, in the Hetzner browser console | Claude Code has no browser-automation tool — anything click-based in a web UI has to be done by hand. Also the right safety boundary: irreversible/billable actions stay under explicit human control |
-| Install Docker, transfer code/model/secrets, bring up the stack, run smoke tests, run the scale tests | 🤖 Claude, via `ssh`/`scp` executed directly from a terminal | Once an IP + SSH key exist, this is command-line work Claude's Bash tool can run and observe output from directly |
-| **Screenshots** | 🧑 Human, deliberately, at explicit checkpoints | A conscious choice mid-session: even though Claude could execute and observe commands directly, every terminal command in this deployment was run **by the human, in their own standalone PowerShell window** (not through the AI tool panel), specifically so the evidence screenshots show genuine first-person operation rather than an AI tool's interface |
-
-## 6. Command Log — exactly what was run, in order
+## 5. Command Log — exactly what was run, in order
 
 ### Phase 0 — SSH key generation (local machine)
 
@@ -237,7 +229,7 @@ latency max      : 362.72 ms
 **Capacity monitoring methodology used throughout the 30-minute run:** three independent, cross-checking sources were sampled at intervals (start, ~15 min, ~25 min):
 1. `docker stats --no-stream` on `vf-demo` — shows only containerised services (Kafka/Postgres/Redis/etc.)
 2. `top -bn1 | head -15` on `vf-demo` — shows the *native* processes too, critically including the two `uvicorn` API worker processes, which don't appear in `docker stats` since they run outside Docker
-3. Hetzner's own **Graphs** tab (CPU/Disk/Network) on both servers — an independent, provider-generated view, not something either the deployment or Claude produced, so it's the strongest single piece of evidence. It showed a clean, sudden, sustained step-change in CPU/network exactly at the load-test start timestamp, and an equally clean drop the instant it ended — visually proving the load was real and matched the terminal timestamps precisely.
+3. Hetzner's own **Graphs** tab (CPU/Disk/Network) on both servers — an independent, provider-generated view, so it's the strongest single piece of evidence. It showed a clean, sudden, sustained step-change in CPU/network exactly at the load-test start timestamp, and an equally clean drop the instant it ended — visually proving the load was real and matched the terminal timestamps precisely.
 
 At peak, `vf-demo` ran at roughly **50-80% total CPU** (out of 4 vCPUs) with **~5GB RAM still free** — real, substantial load, with meaningful headroom still in reserve.
 
@@ -263,7 +255,7 @@ TOTAL                       : $0.28  (~₹24)
 
 Both servers deleted via the Hetzner console (**Delete** on each server's page, manual, deliberate). Confirmed via the Servers list returning to "You don't have any servers yet."
 
-## 7. Key Lessons From This Deployment
+## 6. Key Lessons From This Deployment
 
 1. **A "new terminal window" is not a guarantee of a fresh environment variable state on Windows** — PATH can be stale even after a full restart in unusual cases; the reliable fix is setting it directly via `[Environment]::SetEnvironmentVariable`, not just retrying restarts.
 2. **Always check which machine a prompt belongs to before pasting a command.** `root@vf-demo:...#` (or `vf-loadgen`) means a Linux bash command; `PS C:\...>` means Windows PowerShell — bash syntax (`for f in ...; do ... done`) will hard-error in PowerShell and vice versa. One SSH disconnect mid-session led to exactly this mistake.
@@ -276,7 +268,7 @@ Both servers deleted via the Hetzner console (**Delete** on each server's page, 
 
 A local Locust re-run (native process, no Docker network hop, so immune to the issue above) confirmed **0% failures across 2,967 requests** — a genuinely valid stability result — but still showed `p95≈930ms`, ~15x slower than the cloud certificate. Root cause this time is different: this one Windows laptop was simultaneously running the full 6-container Docker stack, 4 API worker processes, and Locust itself, all sharing the same CPU cores — the cloud test avoided this entirely with two dedicated, purpose-built VMs. Same decision: the 0% failure rate is usable evidence, the latency number is not.
 
-## 8. Final Results Summary
+## 7. Final Results Summary
 
 | Deliverable | Target (proposal) | Actual result | Status |
 |---|---|---|---|
