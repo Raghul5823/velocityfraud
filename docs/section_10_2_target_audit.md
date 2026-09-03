@@ -14,7 +14,7 @@ and where a target is missed, say so first and explain second.
 
 | # | Test type | Target | Measured actual | Verdict |
 |---|---|---|---|---|
-| 1 | Unit | >80% coverage | **69.3%** (1,685/2,431 stmts) | ❌ Missed — reachable, see §1 |
+| 1 | Unit | >80% coverage | **80.05%** (1,950/2,436 stmts) | ✅ Met — see §1 |
 | 2 | Integration | All paths exercised | 7 integration suites over live Redis/Kafka/Postgres/model/API/feedback/appeal | ✅ Met |
 | 3 | E2E | 3 scenarios | Exactly 3, in `tests/test_e2e_scenarios.py` | 🟡 Met, minus the dashboard hop — see §3 |
 | 4 | Model Accuracy | F1 ≥ 0.92, FPR ≤ 2% | F1 **0.460**, FPR **6.56%** | ❌ Missed — see §4 and `model_evaluation.md` |
@@ -24,45 +24,42 @@ and where a target is missed, say so first and explain second.
 | 8 | Data Validation | Zero invalid records | Great Expectations **59/59 expectations PASS** | 🟡 Met, minus watermark — see §8 |
 | 9 | Regression | 100% pass on merge | Latest push `00455f8` → `conclusion: success` | ✅ Met |
 
-**Summary: 4 met outright, 3 met with a documented deviation, 2 genuinely missed.**
+**Summary: 5 met outright, 3 met with a documented deviation, 1 genuinely missed.**
 
 ---
 
-## §1 — Unit coverage: 69.3% against a >80% target
+## §1 — Unit coverage: 80.05%, target met
 
-Measured at audit time with the same command CI runs, against live infrastructure so the
-integration-marked tests execute rather than skip:
+First measured at audit time against live infrastructure: **69.3%** (1,685/2,431 stmts). Four
+operator-run CLI modules — `data_quality.py`, `load_pattern_generator.py`, `ops_metrics.py`,
+`drift.py` — sat at **0% coverage** despite being genuine, working code: each had been *live-verified
+by running it* during development (`ops_metrics poll` returned 26 lag scopes / total lag 5,230;
+`drift.check_drift` compared 126 events and fired its alarm at 65.08% disagreement; the load
+generator produced in-bounds traffic shapes; the GE suite reported 59/59). That is real evidence the
+code works, but it contributes zero *automated* coverage, and the target is specifically about
+coverage.
+
+Tests were added for all four (`tests/test_data_quality.py`, `tests/test_load_pattern_generator.py`,
+`tests/test_drift.py`, `tests/test_ops_metrics.py` — 35 new tests). `data_quality.py` and
+`load_pattern_generator.py` are pure-logic unit tests (no live infra, Gemini calls monkeypatched at
+the same seam the modules themselves use); `drift.py` and `ops_metrics.py` are integration tests
+against the real Postgres/Kafka, matching the project's existing convention (`conftest.py`'s
+`pg_ready`/`kafka_ready` fixtures) rather than introducing a new mocking style for database code.
+
+Re-measured, same command, same live infrastructure:
 
 ```
 uv run pytest tests/ --cov=src/velocityfraud --cov-report=term-missing
--> 87 passed, TOTAL 2431 stmts, 746 miss, 69%
+-> 122 passed, TOTAL 2436 stmts, 486 miss, 80.05%
 ```
 
-**This is a real miss.** It is also a precisely located one: four modules sit at **0% coverage** and
-account for almost exactly the shortfall.
+**80.05% > 80% — the target is met**, not rounded up from something short of it. Per-module result:
+`data_quality.py` 97%, `load_pattern_generator.py` 78%, `ops_metrics.py` 70%, `drift.py` 63% — none
+need to individually clear 80%, since the proposal's target is the aggregate figure.
 
-| Module | Statements | Coverage | What it is |
-|---|---:|---:|---|
-| `data_quality.py` | 73 | 0% | Great Expectations suite runner |
-| `load_pattern_generator.py` | 77 | 0% | Gemini-designed k6 traffic shapes |
-| `ops_metrics.py` | 77 | 0% | Kafka lag + Groq RPM collector |
-| `drift.py` | 54 | 0% | Fast-path vs Groq agreement check |
-| **Total** | **281** | **0%** | **11.6% of the codebase** |
-
-Arithmetic, verified: covering these four fully moves the project to **1,966/2,431 = 80.9%**, which
-**meets the >80% target**. Nothing else needs to change.
-
-**Why they are at 0%, honestly:** all four are operator-run CLI tools rather than pipeline
-components — each was *live-verified by running it* during development (`ops_metrics poll` returned
-26 lag scopes / total lag 5,230; `drift.check_drift` compared 126 events and fired its alarm at
-65.08% disagreement; the load generator produced in-bounds traffic shapes; the GE suite reported
-59/59). Manual live verification is genuine evidence that the code works, but it contributes **zero
-automated coverage**, and the proposal's target is specifically about coverage.
-
-**Disposition:** the target is reachable with ~1–2 hours of unit tests over these four modules
-(their external boundaries — Postgres, `subprocess`, the Gemini client — are all mockable). There is
-further headroom in `appeal.py` (42%), `narrative_grader.py` (43%), and `velocity.py` (53%) if more
-margin is wanted. Recorded here as an open, costed item rather than written off.
+Remaining lower-coverage modules, for the record rather than as an open item: `appeal.py` (42%),
+`narrative_grader.py` (43%), `velocity.py` (53%), `score_cache.py` (76%) — headroom exists here if
+more margin is ever wanted, but the stated target does not require it.
 
 ## §3 — E2E: 3 scenarios, minus one hop that cannot be automated
 
@@ -213,7 +210,7 @@ calculated column that cannot fold to SQL fails at refresh rather than degrading
 
 | Item | Status |
 |---|---|
-| Unit coverage 69.3% → >80% (test the four 0% modules) | ⬜ Open, ~1–2 h, arithmetic verified to land at 80.9% |
+| Unit coverage → >80% | ✅ Done — 80.05%, 35 new tests across the four previously-0% modules |
 | Model Accuracy F1 target | ✅ Analysed and documented; not closeable (1.37× model ceiling) |
 | Model Accuracy FPR target | ✅ Analysed; closeable by config if graded strictly, at 509 frauds' cost |
 | Everything else in the table | ✅ Met, or documented deviation above |
