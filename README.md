@@ -7,7 +7,7 @@
 
 `Kafka (Docker) → fast path (Groq + shadow XGBoost) + slow path (Spark + RF/XGB + SHAP + Gemini + DistilBERT) → Power BI`
 
-See `../PROPOSAL_2_VelocityFraud.md` (parent directory) for the full design.
+See `docs/proposal_gap_remediation.md` for how this maps back to the approved proposal, including every documented deviation.
 
 ## Project layout
 
@@ -44,4 +44,4 @@ docker compose -f infra\docker-compose.yml up -d
 
 ## Status
 
-Phase 0 (setup) complete. Currently building Layer 1 (streaming foundation).
+All 3 layers complete and deployed: Kafka streaming, two-tier scoring (fast-path failover + slow-path enrichment), and 4-view Power BI analytics with a closed feedback loop. Deployed and scale-tested on Hetzner Cloud (Wk14-15 — sustained 10K tx/min, p95=56.69ms). QA: 122 tests, 80.05% coverage, CI green on every push. Full proposal-vs-actual audit in `docs/proposal_gap_remediation.md` and `docs/section_10_2_target_audit.md`.
