@@ -46,8 +46,26 @@ def _client() -> redis.Redis:
 
 
 def feature_hash(x_row) -> str:
-    """Stable hash of a feature vector (numpy row or list-like)."""
-    return hashlib.sha256(json.dumps(list(x_row), default=float).encode()).hexdigest()[:32]
+    """Stable hash of a feature vector (numpy row, Series, single-row DataFrame, or list-like).
+
+    Real bug fixed here (2026-09-03): `list(x_row)` on a pandas DataFrame
+    iterates its COLUMN NAMES, not the row's values -- every DataFrame has
+    the same 43 column names regardless of content, so every transaction
+    hashed to the identical key. In production that means: once any single
+    transaction is scored, every OTHER transaction scored in the next 60s
+    (the cache TTL) would silently receive that first transaction's score
+    and decision, no matter how different the actual risk profile. Caught
+    live via a flaky e2e test -- a $4.25 event and a $999,999 event hashed
+    identically -- not by code review, so the call sites (scorer.py,
+    api.py) are worth re-checking whenever this function changes.
+    """
+    if hasattr(x_row, "to_numpy"):        # pandas Series or single-row DataFrame
+        values = x_row.to_numpy().reshape(-1).tolist()
+    elif hasattr(x_row, "tolist"):        # numpy array
+        values = x_row.tolist()
+    else:
+        values = list(x_row)
+    return hashlib.sha256(json.dumps(values, default=float).encode()).hexdigest()[:32]
 
 
 def get(hash_key: str) -> CachedScore:
