@@ -1,6 +1,6 @@
 # Proposal Gap Analysis & Remediation Plan (Final-Term Audit)
 
-> **Status:** 🔶 Remediation in progress — B1, B3(decision), B7, B9, B10, B2, B4 done. B8 pending Docker. B6 pending sign-off. B5 deferred to Power BI phase.
+> **Status:** ✅ All 13 findings closed (A1–A3, B1–B10). B5 — the one item deferred to the Power BI phase — was closed last via `ops_metrics.py` + migration `010`, surfaced as Kafka-consumer-lag and Groq-RPM-headroom cards in the dashboard.
 > **Project:** VelocityFraud — Real-Time Fraud Detection Data Pipeline
 > **Program:** IMPACT pSiddhi 3.0 — Topic S2-D-06 (Semester 2, Data Track)
 > **Audit date:** 2026-09-02, final week before submission
@@ -32,14 +32,14 @@ The audit was done by re-reading `PROPOSAL_2_VelocityFraud.md` end-to-end and ex
 | B2 | §5 — shadow XGBoost "runs in-broker via the Kafka Streams Processor API" | `failover_scorer.py`: a separate Python process using Redis leader-election for hot-standby takeover. No JVM/Kafka Streams topology anywhere in the repo | ✅ **Documented** in `LAYER_3` §10.5 |
 | B3 | §5 — "exactly-once semantics (`isolation.level=read_committed`) on consumer-side scoring" | Idempotent *producers* confirmed (`enable.idempotence=True` in all 7 producer modules) — but `isolation.level=read_committed` appears nowhere on the consumer side | ✅ **Resolved as decided**: `isolation.level=read_committed` added to all 7 consumers (forward-compatible). Full Kafka *transactions* (the only way this setting has real effect) deliberately NOT built — flagged mid-implementation as materially bigger/riskier than a one-line fix, and full transactional EOS is not structurally required for this POC (proposal §13.5 precedent). Idempotent producers remain the real duplicate-prevention mechanism in place. |
 | B4 | §5 — output schema is binary `{accept, escalate}` | Actual system uses three-way `ALLOW/REVIEW/BLOCK` throughout (confirmed in `slow_path.py`, `feedback.py`, live smoke test) | ✅ **Documented** in `LAYER_3` §10.5 |
-| B5 | §5 — "consumer lag monitored via JMX → Power BI" | No JMX exporter or lag-monitoring mechanism exists | ⏸ Deferred — only needed as a Power BI data source, build alongside that phase |
+| B5 | §5 — "consumer lag monitored via JMX → Power BI" | No JMX exporter or lag-monitoring mechanism exists | ✅ **Closed with an honest substitution** — `ops_metrics.py` + migration `010` poll real lag from Kafka's own `kafka-consumer-groups.sh` and derive Groq RPM from rows actually written to `scored_events_groq`. Both are genuine measurements; only JMX's sub-second granularity is lost, which a DirectQuery dashboard cannot render anyway. Surfaced as two Power BI cards off `ops_metrics_latest`. |
 | B6 | §5 — Databricks slow path uses `trigger=ProcessingTime("1 second")` | Actual code: `.trigger(availableNow=True)` — a run-once, process-available-then-stop batch trigger | ✅ **Documented** in `LAYER_4` §10.5 |
 | B7 | §11 Risk 1 — "cache scores for identical feature hashes (1-min TTL)" | No feature-hash score cache exists | ✅ **Fixed** — `score_cache.py`, wired into `scorer.py` + `api.py` |
 | B8 | §11 Risk 4 — Apicurio compatibility mode = `BACKWARD` | Only a container-alive health check exists; no compatibility rule was ever configured on the registry | ✅ **Applied and verified** — `set-apicurio-compatibility.ps1` run, confirmed `{"compatibility":"BACKWARD"}` on the live registry |
 | B9 | §11 Risk 8 — Groq "pre-warm endpoint via heartbeat" | No heartbeat/pre-warm logic in `groq_scorer.py` | ✅ **Fixed** — `prewarm()` added, called once at `main()` startup |
 | B10 | §11 Risk 9 — "cache last successful narrative pre-demo" | No narrative caching in `narrator.py` | ✅ **Fixed** — Redis-backed narrative cache (24h TTL), falls back to it before the generic template on Gemini failure |
 
-**13 total items.** 3 already resolved and documented tonight. 6 are quick, safe code fixes. 3 are honest documentation of intentional/necessary deviations. 1 is correctly deferred to the Power BI phase where it's actually needed.
+**13 total items — all now closed.** 3 were already resolved and documented at audit time. 6 were code fixes. 3 are honest documentation of intentional/necessary deviations. 1 (B5) was correctly deferred to the Power BI phase and closed there.
 
 ## 4. Deep Dive — B1: Velocity Counters (the one real judgment call)
 
