@@ -158,7 +158,7 @@ def main() -> int:
     n_enriched = 0
     n_decode_fail = 0
     n_explain_fail = 0
-    narrator_counts = {"TEMPLATE": 0, "GEMINI": 0}
+    narrator_counts = {"TEMPLATE": 0, "GEMINI": 0, "GEMINI_CACHED": 0}
     latency_sum_ms = 0.0
     latency_max_ms = 0.0
     start_time = time.monotonic()
@@ -243,7 +243,9 @@ def main() -> int:
                 continue
 
             n_enriched += 1
-            narrator_counts[mode_used] += 1
+            # .get(): NarratorMode is an enum that has grown once already
+            # (GEMINI_CACHED), and a counter must never crash the consumer.
+            narrator_counts[mode_used] = narrator_counts.get(mode_used, 0) + 1
             latency_sum_ms += enrichment_latency_ms
             if enrichment_latency_ms > latency_max_ms:
                 latency_max_ms = enrichment_latency_ms
@@ -281,6 +283,7 @@ def main() -> int:
         logger.info("  Explain/narrate fails   : {}", n_explain_fail)
         logger.info("  Narrator: TEMPLATE      : {}", narrator_counts["TEMPLATE"])
         logger.info("  Narrator: GEMINI        : {}", narrator_counts["GEMINI"])
+        logger.info("  Narrator: GEMINI_CACHED : {}", narrator_counts["GEMINI_CACHED"])
         logger.info("  Latency avg / max (ms)  : {:.2f} / {:.2f}",
                     avg_lat, latency_max_ms)
         logger.info("  Elapsed (s) / Throughput: {:.1f} / {:.1f} enriched/s",
