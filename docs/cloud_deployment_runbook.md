@@ -32,8 +32,8 @@ The proposal (Risk #6) named Oracle Cloud Always Free (Ampere A1, ARM) as primar
 
 | Server | Role | Spec (actual) | Location | Public IPv4 | Lifetime |
 |---|---|---|---|---|---|
-| `vf-demo` | System under test — full stack: Kafka, Postgres, Redis, MLflow, Apicurio, Kafka-UI, FastAPI scoring API | Hetzner **CPX32** — 4 vCPU (x86/AMD), 8 GB RAM, 160 GB SSD, Ubuntu 26.04 | Helsinki (eu-central) | `2.29.1.199` | ~3 hours |
-| `vf-loadgen` | Load generator only (Wk 15) — runs k6 + Locust **against** `vf-demo`'s public IP over the public internet, from a genuinely separate machine so results aren't contaminated by shared CPU | Hetzner **CPX22** — 2 vCPU (x86/AMD), 4 GB RAM, 80 GB SSD, Ubuntu 26.04 | Helsinki (eu-central) — same location as `vf-demo`, for a fast network path | `204.168.142.84` | ~2 hours |
+| `vf-demo` | System under test — full stack: Kafka, Postgres, Redis, MLflow, Apicurio, Kafka-UI, FastAPI scoring API | Hetzner **CPX32** — 4 vCPU (x86/AMD), 8 GB RAM, 160 GB SSD, Ubuntu 26.04 | Helsinki (eu-central) | `<server-ip>` | ~3 hours |
+| `vf-loadgen` | Load generator only (Wk 15) — runs k6 + Locust **against** `vf-demo`'s public IP over the public internet, from a genuinely separate machine so results aren't contaminated by shared CPU | Hetzner **CPX22** — 2 vCPU (x86/AMD), 4 GB RAM, 80 GB SSD, Ubuntu 26.04 | Helsinki (eu-central) — same location as `vf-demo`, for a fast network path | `<loadgen-ip>` | ~2 hours |
 
 **Why two separate servers, not one:** if the load generator and the system-under-test shared one machine, the load generator's own CPU usage would starve the scorer and *contaminate* the latency numbers — you'd be measuring contention, not real throughput. This is Proposal Risk #5's exact concern, resolved by design. `vf-loadgen` is deliberately smaller (2 vCPU is plenty — it only fires HTTP requests, it never runs the stack itself).
 
@@ -46,8 +46,8 @@ The proposal (Risk #6) named Oracle Cloud Always Free (Ampere A1, ARM) as primar
 
   | | |
   |---|---|
-  | Private key | `C:\Users\raghul.sridhar\.ssh\hetzner-key` (stays on your laptop — never share) |
-  | Public key | `C:\Users\raghul.sridhar\.ssh\hetzner-key.pub` |
+  | Private key | `%USERPROFILE%\.ssh\hetzner-key` (stays on your laptop — never share) |
+  | Public key | `%USERPROFILE%\.ssh\hetzner-key.pub` |
   | Fingerprint | `SHA256:jRtZ6NB+8/AdvLAhC5QfDl3JcBn0EfhO1H/bA1f0s/o` |
   | Type | ED25519 |
 
@@ -86,13 +86,13 @@ Running `ssh -V` in a fresh PowerShell window failed with `"ssh" is not recogniz
 
 ### Phase 1 — Server creation (Hetzner browser console, manual)
 
-`vf-demo`: Type=CPX32, Architecture=x86 (AMD, "Regular Performance" line — ARM/CAX was sold out on every EU location tried), Location=Helsinki, Image=Ubuntu 26.04, Networking=IPv4+IPv6, SSH key=hetzner-key, Name=vf-demo → **Create & Buy now**. Result: running, public IPv4 `2.29.1.199`.
+`vf-demo`: Type=CPX32, Architecture=x86 (AMD, "Regular Performance" line — ARM/CAX was sold out on every EU location tried), Location=Helsinki, Image=Ubuntu 26.04, Networking=IPv4+IPv6, SSH key=hetzner-key, Name=vf-demo → **Create & Buy now**. Result: running, public IPv4 `<server-ip>`.
 
 ### Phase 2 — Install Docker, git, uv on `vf-demo`
 
 Connect:
 ```bash
-ssh -i "$env:USERPROFILE\.ssh\hetzner-key" root@2.29.1.199
+ssh -i "$env:USERPROFILE\.ssh\hetzner-key" root@<server-ip>
 ```
 (First connection prompts `The authenticity of host ... can't be established ... Are you sure you want to continue connecting (yes/no)?` — type `yes`. This is SSH verifying the server's host key on first contact; it's remembered afterward.)
 
@@ -123,8 +123,8 @@ git clone https://github.com/Raghul5823/velocityfraud.git && cd velocityfraud &&
 
 The trained model (`models/xgboost_v1.pkl`, 4.4 MB) and `.env` (API keys) are **git-ignored by design** — they never touch GitHub, so they have to be copied directly, laptop → server. Run **from a separate local PowerShell window** (not the SSH session — this reads local files):
 ```powershell
-scp -i "$env:USERPROFILE\.ssh\hetzner-key" "...\velocityfraud\models\xgboost_v1.pkl" root@2.29.1.199:/root/velocityfraud/models/
-scp -i "$env:USERPROFILE\.ssh\hetzner-key" "...\velocityfraud\.env" root@2.29.1.199:/root/velocityfraud/.env
+scp -i "$env:USERPROFILE\.ssh\hetzner-key" "...\velocityfraud\models\xgboost_v1.pkl" root@<server-ip>:/root/velocityfraud/models/
+scp -i "$env:USERPROFILE\.ssh\hetzner-key" "...\velocityfraud\.env" root@<server-ip>:/root/velocityfraud/.env
 ```
 Both confirmed 100% transferred.
 
@@ -166,7 +166,7 @@ Result: a genuine live decision — `"decision": "ALLOW"`, `"fraud_score": 0.413
 
 ### Phase 6 — `vf-loadgen` provisioning + scale test (Wk15)
 
-`vf-loadgen` created: CPX22, Helsinki (same region), Ubuntu 26.04, same SSH key, IPv4 `204.168.142.84`.
+`vf-loadgen` created: CPX22, Helsinki (same region), Ubuntu 26.04, same SSH key, IPv4 `<loadgen-ip>`.
 
 Install k6 (from Grafana's official apt repo — not in Ubuntu's default repos):
 ```bash
@@ -183,13 +183,13 @@ uv venv loadgen-env && source loadgen-env/bin/activate && uv pip install locust 
 
 Transfer the two test scripts from the laptop (same `scp` pattern as Phase 3, targeting `vf-loadgen`'s IP instead):
 ```powershell
-scp -i "$env:USERPROFILE\.ssh\hetzner-key" "...\perf\k6-score.js" root@204.168.142.84:/root/
-scp -i "$env:USERPROFILE\.ssh\hetzner-key" "...\perf\locustfile.py" root@204.168.142.84:/root/
+scp -i "$env:USERPROFILE\.ssh\hetzner-key" "...\perf\k6-score.js" root@<loadgen-ip>:/root/
+scp -i "$env:USERPROFILE\.ssh\hetzner-key" "...\perf\locustfile.py" root@<loadgen-ip>:/root/
 ```
 
 **Stage A — 3-minute validation run** (fail fast before committing to 30 minutes):
 ```bash
-k6 run -e BASE_URL=http://2.29.1.199:8000 -e RATE_PER_SEC=167 -e DURATION=180s k6-score.js
+k6 run -e BASE_URL=http://<server-ip>:8000 -e RATE_PER_SEC=167 -e DURATION=180s k6-score.js
 ```
 Result: 30,994 requests, 0% failed, throughput ~9,786/min, p95 = 26.40ms. One non-fatal error appeared: `ERRO ... could not open 'perf/k6-summary.json': no such file or directory` — see "Gotcha" below.
 
@@ -209,7 +209,7 @@ Verdict: enormous headroom, current API config (2 uvicorn workers) sufficient fo
 ```bash
 apt-get install -y screen
 screen -S k6full
-k6 run -e BASE_URL=http://2.29.1.199:8000 -e RATE_PER_SEC=167 -e DURATION=30m k6-score.js
+k6 run -e BASE_URL=http://<server-ip>:8000 -e RATE_PER_SEC=167 -e DURATION=30m k6-score.js
 # then Ctrl+A, D to detach — the test keeps running on the server independent of the SSH session
 # reattach anytime with: screen -r k6full
 ```
@@ -236,7 +236,7 @@ At peak, `vf-demo` ran at roughly **50-80% total CPU** (out of 4 vCPUs) with **~
 **Locust confirmation run** (closing the proposal's "k6 + Locust" pairing — a deliberate, separate second tool/methodology, not a duplicate of the k6 test):
 ```bash
 source loadgen-env/bin/activate
-locust -f locustfile.py --headless -u 100 -r 20 -t 3m --host http://2.29.1.199:8000 --csv=perf/locust_cloud
+locust -f locustfile.py --headless -u 100 -r 20 -t 3m --host http://<server-ip>:8000 --csv=perf/locust_cloud
 ```
 Result: 56,035 requests, 0% failures, avg 286ms, p95 = 420ms, throughput ~311.5 req/s (~18,690/min). Locust's concurrent-user model (100 simultaneous simulated users) is a deliberately different load shape from k6's fixed-arrival-rate model — together they stress the API in two genuinely different ways, which is the actual reason the proposal names both tools rather than just picking one.
 
