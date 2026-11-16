@@ -1,0 +1,131 @@
+VELOCITYFRAUD LIVE DEMO - RUN SHEET (Fri 6 Nov 2026, 11:00 IST)
+=====================================================================
+
+BEFORE 11:00
+------------
+[ ] Docker Desktop running with the velocityfraud-dev containers (needed for 1.0)
+[ ] 10:45  P1 Readiness check - every line OK
+[ ] 10:45  P6 Load server check - OK
+[ ] P2 Secure tunnel - minimise the tunnel window, never close it
+       (Kafka UI, MLflow and Power BI need it)
+[ ] P3 Power BI - refresh with Optimize > Refresh visuals (NEVER Home > Refresh)
+[ ] Open these tabs now from the console's "Open:" bar, so each click is instant:
+       Kafka UI | MLflow | API docs (Swagger) | Hetzner Console
+[ ] Settings > Clear step marks
+
+
+DEMO ORDER  (OPEN = switch to that screen after the step finishes)
+----------
+
+ACT 1 - The live platform
+  1.0  Full test suite starts (FIRST CLICK - runs ~5 min in the background)
+  1.1  Platform overview      OPEN Hetzner Console: vf-demo is running
+  1.2  Live event stream      OPEN Kafka UI: Topics > transactions.raw > Messages
+                              (not the Kafka UI Dashboard - it shows 0 Bytes)
+  1.3  Decision mix           OPEN Power BI: Real-time Alert Feed (Optimize > Refresh visuals)
+                              Say: demo thresholds 0.10 / 0.18, production 0.50 / 0.85
+
+ACT 2 - Decisions in milliseconds, explained
+  2.1  Scoring API            OPEN Swagger: POST /score - send one body live (see below)
+  2.2  Velocity rule
+  2.3  SHAP evidence          OPEN Power BI: Real-time Alert Feed, narrative column
+  2.4  DistilBERT merchant names
+  2.5  Gemini narratives      (run ONCE only - uses Gemini quota)
+
+ACT 3 - AI oversight and resilience   (run 3.1 -> 3.2 -> 3.3 back to back)
+  3.1  Groq starts
+  3.2  XGBoost vs Groq        OPEN Power BI: Operational Health
+  3.3  Remove the LLM         (this stops Groq)
+  3.4  Failover               (always follow with 3.5)
+  3.5  Self-healing
+  3.6  Drift monitor
+
+ACT 4 - Humans in control
+  4.1  Customer appeal
+  4.2  Analyst overturn
+  4.3  Learning loop
+
+ACT 5 - Operate, govern, scale
+  5.1  Operational health     OPEN Power BI: Operational Health
+  5.2  Model governance       OPEN MLflow: experiment fraud-detection
+                              Point at the finished xgboost_v1 and random_forest_v1
+                              (ignore the 2 red early-July runs)
+                              Then Power BI: Model Performance
+  5.3  Cloud infrastructure   OPEN Hetzner Console: vf-demo > Graphs
+  5.4  k6 live load test      wait ~75 s for the result
+                              OPEN Hetzner Console: Graphs of vf-demo AND vf-loadgen (the spike)
+  5.5  Locust live capacity   wait ~75 s, then Hetzner Graphs again (second spike)
+  5.6  Live quality checks    (7 checks)
+  5.7  QA evidence            (recorded results - say so)
+  5.8  Test suite results     (if "Still running", click again in a minute)
+
+AFTER THE DEMO
+  Delete vf-loadgen and vf-demo in the Hetzner Console.
+  Stop local Docker: docker compose -f infra/docker-compose.yml down
+
+
+SWAGGER (API docs) - what to type
+=================================
+Endpoints:
+  GET  /ping     - is the API up
+  GET  /health   - model loaded, champion model, thresholds
+  POST /score    - score one transaction
+
+How: click the endpoint > "Try it out" > paste a body > "Execute".
+GET /health needs no body: Try it out > Execute.
+
+IMPORTANT: change "event_id" and "card_token" every time you send
+(add -2, -3 ...). The bodies use a fixed event time, so they give
+the same decision at any hour.
+
+1) ALLOW - USD 25 grocery, 2 km from usual location   (score about 0.06)
+{
+  "event_id": "swagger-a-1",
+  "customer_id": "7919",
+  "card_token": "swagger-a-1",
+  "amount": 25.0,
+  "merchant_name": "W-MERCHANT-gmail.com",
+  "mcc": "5411",
+  "merchant_country": "US",
+  "geo_distance_km": 2.0,
+  "event_timestamp_ms": 1793943900000
+}
+
+2) REVIEW - USD 899 electronics, Russia, 8,742 km away   (score about 0.12)
+{
+  "event_id": "swagger-b-1",
+  "customer_id": "7919",
+  "card_token": "swagger-b-1",
+  "amount": 899.0,
+  "merchant_name": "C-MERCHANT-hotmail.com",
+  "mcc": "5732",
+  "merchant_country": "RU",
+  "geo_distance_km": 8742.0,
+  "event_timestamp_ms": 1793943900000
+}
+
+3) BLOCK - USD 1,500 electronics, 3,000 km away   (score about 0.28)
+{
+  "event_id": "swagger-c-1",
+  "customer_id": "7919",
+  "card_token": "swagger-c-1",
+  "amount": 1500.0,
+  "merchant_name": "W-MERCHANT-gmail.com",
+  "mcc": "5732",
+  "merchant_country": "US",
+  "geo_distance_km": 3000.0,
+  "event_timestamp_ms": 1793943900000
+}
+
+Response fields to point at:
+  decision             ALLOW / REVIEW / BLOCK
+  fraud_score          the XGBoost probability
+  scoring_latency_ms   time inside the API, in milliseconds
+  velocity_hit         true if the card-testing rule fired
+  blocklist_hit        true if the card / IP / device is blocklisted
+  feature_completeness share of the 43 model features available on this event
+
+Optional velocity trick (only if time allows):
+  Send body 1 five times within one minute with the SAME card_token
+  but a NEW event_id each time (swagger-a-1, swagger-a-2, ...).
+  The 5th one comes back REVIEW with velocity_hit = true.

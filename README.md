@@ -19,6 +19,9 @@ See `docs/proposal_gap_remediation.md` for how this maps back to the approved pr
 | `data/raw/` | IEEE-CIS dataset (DVC-tracked, never committed to Git) |
 | `scripts/` | One-off shell + Python utilities (create topics, etc.) |
 | `infra/` | Docker compose files for Kafka + MLflow + Schema Registry |
+| `demo-console/` | Browser-based live demo console that runs each demo step on the cloud server over SSH (`python server.py`); server IPs and the key path live in a local, gitignored `settings.json` |
+| `presentation/` | 60-minute session script, deck prompts, run sheet and the source pack used to build the slides |
+| `evidently-pilot/` | Separate Evidently evaluation of the model and live features; reads the project, never changes it |
 
 ## Tech stack
 

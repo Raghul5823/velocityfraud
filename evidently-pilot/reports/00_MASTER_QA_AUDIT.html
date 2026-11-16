@@ -1,0 +1,515 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>VelocityFraud QA Audit</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap">
+<style>
+  /* Layout: an audit dossier. Verdict first, then the evidence ladder, the per-component
+     scorecard, the findings register and the decision record; evidence index last. */
+  :root {
+    --bg: #f3f5f8; --surface: #ffffff; --ink: #142033; --muted: #586579; --line: #d9dfe8;
+    --accent: #1d4ea6; --accent-soft: #e6edf9;
+    --ok: #1c7444; --ok-bg: #e3f2e9; --warn: #8f5600; --warn-bg: #fcf0d9;
+    --bad: #b0241c; --bad-bg: #fbe8e6; --info: #4a5873; --info-bg: #ebeff5;
+    --f-display: "IBM Plex Sans Condensed", "Arial Narrow", "Segoe UI", sans-serif;
+    --f-body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+    --f-mono: "IBM Plex Mono", "Cascadia Mono", Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0d131c; --surface: #141c28; --ink: #e5eaf2; --muted: #9aa6b8; --line: #263245;
+      --accent: #86a9f0; --accent-soft: #1a2741;
+      --ok: #62cc90; --ok-bg: #11301f; --warn: #f1b558; --warn-bg: #33260f;
+      --bad: #ff8b80; --bad-bg: #3a1714; --info: #aab7cc; --info-bg: #1b2432; color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0d131c; --surface: #141c28; --ink: #e5eaf2; --muted: #9aa6b8; --line: #263245;
+    --accent: #86a9f0; --accent-soft: #1a2741;
+    --ok: #62cc90; --ok-bg: #11301f; --warn: #f1b558; --warn-bg: #33260f;
+    --bad: #ff8b80; --bad-bg: #3a1714; --info: #aab7cc; --info-bg: #1b2432; color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.6 var(--f-body); }
+  .wrap { max-width: 1100px; margin: 0 auto; padding-block: 32px 64px;
+          padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+          display: grid; gap: 40px; }
+  h1, h2, h3 { font-family: var(--f-display); text-wrap: balance; margin: 0; line-height: 1.15; }
+  h1 { font-size: clamp(30px, 5vw, 44px); font-weight: 700; letter-spacing: -.2px; }
+  h2 { font-size: 24px; font-weight: 600; }
+  h3 { font-size: 17px; font-weight: 600; }
+  p { margin: 0; }
+  a { color: var(--accent); }
+  a:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .eyebrow { font: 500 12px/1.4 var(--f-mono); letter-spacing: 1.2px; text-transform: uppercase; color: var(--accent); }
+  .muted { color: var(--muted); }
+  .mono { font-family: var(--f-mono); }
+  .num { font-variant-numeric: tabular-nums; }
+  section { display: grid; gap: 16px; min-width: 0; }
+  .sec-head { display: grid; gap: 6px; max-width: 72ch; }
+
+  /* Header */
+  header.doc { display: grid; gap: 18px; border-top: 4px solid var(--accent); padding-top: 22px; }
+  .meta { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px 24px; }
+  .meta div { display: grid; gap: 2px; min-width: 0; }
+  .meta dt { font: 500 11.5px/1.4 var(--f-mono); letter-spacing: .8px; text-transform: uppercase; color: var(--muted); }
+  .meta dd { margin: 0; font-size: 14px; }
+
+  /* Verdict */
+  .verdict { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 24px; display: grid; gap: 18px; }
+  .verdict-top { display: flex; gap: 16px 20px; align-items: flex-start; flex-wrap: wrap; }
+  .stamp { font: 700 15px/1 var(--f-display); letter-spacing: 1.5px; text-transform: uppercase; padding: 10px 14px;
+           border: 2px solid var(--warn); color: var(--warn); background: var(--warn-bg); border-radius: 6px; flex: none; }
+  .verdict-text { flex: 1 1 420px; min-width: 0; display: grid; gap: 8px; }
+  .verdict-text h2 { font-size: 22px; }
+  .pillars { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+  .pillar { border-top: 1px solid var(--line); padding-top: 12px; display: grid; gap: 6px; min-width: 0; }
+  .pillar .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+
+  /* Chips */
+  .chip { display: inline-flex; align-items: center; gap: 6px; font: 600 11.5px/1 var(--f-mono); letter-spacing: .6px;
+          text-transform: uppercase; padding: 5px 8px; border-radius: 4px; white-space: nowrap; }
+  .chip::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+  .g { color: var(--ok); background: var(--ok-bg); }
+  .a { color: var(--warn); background: var(--warn-bg); }
+  .r { color: var(--bad); background: var(--bad-bg); }
+  .i { color: var(--info); background: var(--info-bg); }
+  .tally { display: flex; gap: 8px; flex-wrap: wrap; }
+
+  /* Chart */
+  .chart-box { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 18px 18px 10px; overflow-x: auto; }
+  .chart-box svg { display: block; width: 100%; min-width: 620px; height: auto; }
+  .ax { stroke: var(--line); stroke-width: 1; }
+  .ax-t { fill: var(--muted); font: 11px var(--f-mono); }
+  .lbl { fill: var(--ink); font: 500 13px var(--f-body); }
+  .sub { fill: var(--muted); font: 11.5px var(--f-body); }
+  .val { fill: var(--ink); font: 600 13px var(--f-mono); }
+  .gate { stroke: var(--accent); stroke-width: 1.5; stroke-dasharray: 5 4; }
+  .gate-t { fill: var(--accent); font: 600 11px var(--f-mono); }
+  .bar-g { fill: var(--ok); } .bar-a { fill: var(--warn); } .bar-r { fill: var(--bad); }
+  .track { fill: var(--bg); }
+
+  /* Tables */
+  .tbl { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; }
+  th, td { text-align: left; vertical-align: top; padding: 11px 14px; border-bottom: 1px solid var(--line); }
+  tr:last-child td { border-bottom: 0; }
+  th { font: 600 11.5px/1.4 var(--f-mono); letter-spacing: .7px; text-transform: uppercase; color: var(--muted); background: var(--bg); white-space: nowrap; }
+  td.comp { font-weight: 600; min-width: 170px; }
+  td.ev { white-space: nowrap; font: 12.5px var(--f-mono); }
+  td.ev a { text-decoration: none; }
+  td.ev a:hover { text-decoration: underline; }
+  .scorecard td:nth-child(3) { min-width: 300px; }
+  .scorecard td:nth-child(4) { min-width: 220px; }
+  .gates td, .gates th { text-align: center; white-space: nowrap; }
+  .gates td:first-child, .gates th:first-child { text-align: left; }
+  .pass { color: var(--ok); font-weight: 600; } .fail { color: var(--bad); font-weight: 600; }
+
+  /* Findings and decisions */
+  .register { display: grid; gap: 10px; }
+  .finding { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px;
+             display: grid; grid-template-columns: 64px 1fr; gap: 6px 16px; }
+  .finding .id { font: 600 13px var(--f-mono); color: var(--muted); padding-top: 2px; }
+  .finding .body { display: grid; gap: 8px; min-width: 0; }
+  .finding .top { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .kv { display: grid; grid-template-columns: 92px 1fr; gap: 4px 12px; font-size: 14px; }
+  .kv dt { font: 500 11.5px/1.7 var(--f-mono); letter-spacing: .6px; text-transform: uppercase; color: var(--muted); }
+  .kv dd { margin: 0; min-width: 0; }
+  .decisions { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; }
+  .decision { border-top: 2px solid var(--accent); background: var(--surface); padding: 14px 16px 16px; display: grid; gap: 6px; align-content: start; }
+  .decision .id { font: 600 12px var(--f-mono); color: var(--accent); letter-spacing: .6px; }
+
+  /* Roadmap */
+  .phases { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; }
+  .phase { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px; display: grid; gap: 10px; align-content: start; }
+  .phase .k { display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; font-size: 13.5px; }
+  .phase .k span:nth-child(even) { font: 600 13.5px var(--f-mono); text-align: right; }
+  .phase .tag { font: 500 11.5px var(--f-mono); color: var(--muted); letter-spacing: .6px; text-transform: uppercase; }
+
+  /* Lists */
+  .two { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; }
+  .panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; display: grid; gap: 10px; align-content: start; min-width: 0; }
+  ul.clean { margin: 0; padding-left: 18px; display: grid; gap: 6px; }
+  .evidx td:first-child { font: 600 12.5px var(--f-mono); white-space: nowrap; }
+  .evidx td:nth-child(2) { font-weight: 600; min-width: 200px; }
+  .evidx td:nth-child(3) { min-width: 320px; }
+  .evidx a { text-decoration: none; }
+  .evidx a:hover { text-decoration: underline; }
+  .note { font-size: 13px; color: var(--muted); }
+  footer { font-size: 13px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 16px; }
+
+  @media (max-width: 560px) {
+    .finding { grid-template-columns: 1fr; }
+    .kv { grid-template-columns: 1fr; gap: 0 12px; }
+    .kv dd { margin-bottom: 6px; }
+  }
+  @media (prefers-reduced-motion: no-preference) { a, .chip { transition: color .15s; } }
+</style>
+
+<div class="wrap">
+
+  <header class="doc">
+    <div class="eyebrow">Master QA audit · Evidently evidence pack</div>
+    <h1>VelocityFraud QA Audit</h1>
+    <p class="muted" style="max-width:72ch">One verdict per component of the fraud-detection system, built from every Evidently report and summary produced on 5 November 2026, with the findings, the architecture decisions they lead to, and the measured path to production quality.</p>
+    <dl class="meta">
+      <div><dt>System</dt><dd>VelocityFraud · IMPACT pSiddhi 3.0 · S2-D-06</dd></div>
+      <div><dt>System owner</dt><dd>Raghul Sridhar</dd></div>
+      <div><dt>Audit date</dt><dd class="num">5 November 2026</dd></div>
+      <div><dt>Models under test</dt><dd>XGBoost champion · Random Forest challenger</dd></div>
+      <div><dt>Evidence</dt><dd>16 Evidently reports and 3 summaries from 3 runs on 118,108 held-out transactions</dd></div>
+    </dl>
+  </header>
+
+  <section class="verdict" aria-labelledby="v-h">
+    <div class="verdict-top">
+      <div class="stamp">Overall: Amber</div>
+      <div class="verdict-text">
+        <h2 id="v-h">The model and the platform are sound. Live scores need feature alignment before they can block payments on their own.</h2>
+        <p>The XGBoost champion ranks fraud at 0.956 on the project's random split and 0.889 on future days, and the pipeline delivers every event exactly once at 63 ms p95. The gap sits in one place: the live feature code gives the model inputs that match training on only 7 of its 43 features, so live ranking quality drops to 0.574. That is fine for the demo and for routing cases to an analyst, but not yet for automatic blocking. Every cause is identified, and a three-phase fix has been measured on the same transactions.</p>
+      </div>
+    </div>
+    <div class="pillars">
+      <div class="pillar"><div class="row"><span class="chip g">Green</span><h3>Model and data</h3></div><p class="muted">Champion passes all four quality gates offline. Data is clean and the training pipeline reproduces exactly.</p></div>
+      <div class="pillar"><div class="row"><span class="chip r">Red</span><h3>Live score accuracy</h3></div><p class="muted">Inputs match training on 7 of 43 features, so live scores catch 3.1% of fraud at production thresholds. Fixable in three measured phases.</p></div>
+      <div class="pillar"><div class="row"><span class="chip g">Green</span><h3>Pipeline engineering</h3></div><p class="muted">0 duplicate events, 0 missing values, p95 latency 63 ms, laptop replica identical to the pipeline.</p></div>
+    </div>
+    <div class="tally" aria-label="Scorecard tally">
+      <span class="chip g">6 green</span><span class="chip a">5 amber</span><span class="chip r">2 red</span>
+      <span class="muted" style="font-size:13px;align-self:center">across 13 audited components</span>
+    </div>
+  </section>
+
+  <section aria-labelledby="c-h">
+    <div class="sec-head">
+      <div class="eyebrow">Evidence ladder</div>
+      <h2 id="c-h">Ranking quality across every scenario tested</h2>
+      <p class="muted">ROC-AUC on held-out transactions, drawn to scale from 0.5 (a coin flip) to 1.0 (perfect). The dashed line is the quality gate at 0.90. Same model file in every row except out-of-time, which retrains the same recipe on past days only.</p>
+    </div>
+    <div class="chart-box">
+      <svg viewBox="0 0 760 360" role="img" aria-label="ROC-AUC by scenario: live today 0.574, live pipeline export 0.597, live with code fixes 0.660, live with code fixes and richer event 0.783, out-of-time 0.889, offline random split 0.956. Gate at 0.90.">
+        <!-- scale: x = 280 + (auc - 0.5) * 900  -> 0.5 at 280, 1.0 at 730 -->
+        <g>
+          <line class="ax" x1="280" y1="16" x2="280" y2="318"/><text class="ax-t" x="280" y="336" text-anchor="middle">0.5</text>
+          <line class="ax" x1="370" y1="16" x2="370" y2="318"/><text class="ax-t" x="370" y="336" text-anchor="middle">0.6</text>
+          <line class="ax" x1="460" y1="16" x2="460" y2="318"/><text class="ax-t" x="460" y="336" text-anchor="middle">0.7</text>
+          <line class="ax" x1="550" y1="16" x2="550" y2="318"/><text class="ax-t" x="550" y="336" text-anchor="middle">0.8</text>
+          <line class="ax" x1="640" y1="16" x2="640" y2="318"/><text class="ax-t" x="640" y="336" text-anchor="middle">0.9</text>
+          <line class="ax" x1="730" y1="16" x2="730" y2="318"/><text class="ax-t" x="730" y="336" text-anchor="middle">1.0</text>
+        </g>
+        <g>
+          <text class="lbl" x="0" y="38">Live pipeline today</text><text class="sub" x="0" y="54">same transactions, live features</text>
+          <rect class="track" x="280" y="28" width="450" height="22" rx="3"/><rect class="bar-r" x="280" y="28" width="66.6" height="22" rx="3"/><text class="val" x="354.6" y="44">0.574</text>
+
+          <text class="lbl" x="0" y="88">Live pipeline export</text><text class="sub" x="0" y="104">4,692 real events, Jul–Aug run</text>
+          <rect class="track" x="280" y="78" width="450" height="22" rx="3"/><rect class="bar-r" x="280" y="78" width="87.3" height="22" rx="3"/><text class="val" x="375.3" y="94">0.597</text>
+
+          <text class="lbl" x="0" y="138">Live + 9 code fixes</text><text class="sub" x="0" y="154">what-if, phase 1</text>
+          <rect class="track" x="280" y="128" width="450" height="22" rx="3"/><rect class="bar-r" x="280" y="128" width="144" height="22" rx="3"/><text class="val" x="432" y="144">0.660</text>
+
+          <text class="lbl" x="0" y="188">Live + fixes + richer event</text><text class="sub" x="0" y="204">what-if, phase 2 (17 extra fields)</text>
+          <rect class="track" x="280" y="178" width="450" height="22" rx="3"/><rect class="bar-a" x="280" y="178" width="254.7" height="22" rx="3"/><text class="val" x="542.7" y="194">0.783</text>
+
+          <text class="lbl" x="0" y="238">Out-of-time</text><text class="sub" x="0" y="254">trained on past, tested on days 141–182</text>
+          <rect class="track" x="280" y="228" width="450" height="22" rx="3"/><rect class="bar-a" x="280" y="228" width="350.1" height="22" rx="3"/><text class="val" x="652" y="244" text-anchor="start">0.889</text>
+
+          <text class="lbl" x="0" y="288">Offline, random split</text><text class="sub" x="0" y="304">all 43 features, as documented</text>
+          <rect class="track" x="280" y="278" width="450" height="22" rx="3"/><rect class="bar-g" x="280" y="278" width="410.4" height="22" rx="3"/><text class="val" x="698" y="294" text-anchor="start">0.956</text>
+        </g>
+        <line class="gate" x1="640" y1="10" x2="640" y2="318"/><text class="gate-t" x="636" y="10" text-anchor="end">gate 0.90</text>
+      </svg>
+    </div>
+    <p class="note">Bars are red below 0.70, amber from 0.70 to 0.90 and green at or above the 0.90 gate. Sources: <a href="#ev-r00">R00</a>, <a href="#ev-r04">R04</a>, <a href="#ev-r08">R08</a>.</p>
+  </section>
+
+  <section aria-labelledby="s-h">
+    <div class="sec-head">
+      <div class="eyebrow">Component scorecard</div>
+      <h2 id="s-h">Quality of each component, one by one</h2>
+      <p class="muted">Green: fit for purpose. Amber: works, with a measured weakness to manage. Red: not fit for its purpose today.</p>
+    </div>
+    <div class="tbl">
+      <table class="scorecard">
+        <thead><tr><th>Component</th><th>Rating</th><th>Evidence</th><th>Verdict</th><th>Source</th></tr></thead>
+        <tbody>
+          <tr><td class="comp">Training data</td><td><span class="chip g">Green</span></td>
+            <td>590,540 transactions, 0 duplicate IDs, fraud rate 3.5%. 15 of 55 columns are more than half empty (dist2 94%); training fills gaps with the −999 sentinel.</td>
+            <td>Clean and complete for its purpose. Sparse columns are known and handled.</td><td class="ev"><a href="#ev-r12">R12</a></td></tr>
+          <tr><td class="comp">Training feature pipeline</td><td><span class="chip g">Green</span></td>
+            <td>Rebuilt independently and matched the project's test set exactly. Frequency tables and the $445 cut-off were fitted on all rows, test rows included.</td>
+            <td>Reproducible. The full-data fitting is a minor leak to correct at the next retrain.</td><td class="ev"><a href="#ev-r08">R08</a></td></tr>
+          <tr><td class="comp">Champion model (XGBoost)</td><td><span class="chip g">Green</span></td>
+            <td>ROC-AUC 0.956, PR-AUC 0.709. At 0.50: 83.9% of fraud caught ($521,608 of $639,135), 6.6% of good customers flagged, precision 31.7%.</td>
+            <td>Strong. Passes all four quality gates.</td><td class="ev"><a href="#ev-r01">R01</a> <a href="#ev-r09">R09</a> <a href="#ev-r15">R15</a></td></tr>
+          <tr><td class="comp">Champion selection</td><td><span class="chip g">Green</span></td>
+            <td>Random Forest: ROC-AUC 0.950, 77.8% caught, 4.4% flagged, precision 39.2%. Random Forest fails the recall gate.</td>
+            <td>XGBoost is the right champion: it misses fewer frauds, and a missed fraud costs more than a review.</td><td class="ev"><a href="#ev-r09">R09</a> <a href="#ev-r15">R15</a></td></tr>
+          <tr><td class="comp">Performance on future days</td><td><span class="chip a">Amber</span></td>
+            <td>Same recipe trained on the past, tested on days 141–182: ROC-AUC 0.889, PR-AUC 0.450, 63.1% caught, 7.4% flagged, precision 23.4%.</td>
+            <td>Good, but below the gate. This is the realistic estimate for new transactions.</td><td class="ev"><a href="#ev-r10">R10</a> <a href="#ev-r15">R15</a></td></tr>
+          <tr><td class="comp">Evaluation method</td><td><span class="chip a">Amber</span></td>
+            <td>The random split puts the same cards in training and test, worth about 0.066 ROC-AUC. Early stopping used the test set, worth 0.0014.</td>
+            <td>The headline 0.956 is optimistic. Out-of-time testing should be the standard.</td><td class="ev"><a href="#ev-r10">R10</a></td></tr>
+          <tr><td class="comp">Segment robustness</td><td><span class="chip a">Amber</span></td>
+            <td>Product W, 75% of traffic, is weakest: ROC-AUC 0.940, 72.9% caught. Product C flags 20.6% of good customers, credit cards 13.0%, amounts of $445 and over 13.4%.</td>
+            <td>Uneven. The largest segment gets the least protection.</td><td class="ev"><a href="#ev-r08">R08</a></td></tr>
+          <tr><td class="comp">Threshold policy</td><td><span class="chip a">Amber</span></td>
+            <td>Production 0.50 / 0.85 blocks 0.7% of good customers. Demo 0.10 / 0.18 blocks 25.8% offline and 29.3% live.</td>
+            <td>Production policy is sound. Demo thresholds are for demonstration only.</td><td class="ev"><a href="#ev-r11">R11</a> <a href="#ev-r00">R00</a></td></tr>
+          <tr><td class="comp">Live feature parity</td><td><span class="chip r">Red</span></td>
+            <td>7 of 43 features match training and 23 never do. On the same transactions: ROC-AUC 0.574, 3.1% of fraud caught at 0.50 ($27,025).</td>
+            <td>Runs end to end, but its scores are too weak for automatic blocking yet. Fails three of four gates.</td><td class="ev"><a href="#ev-r01">R01</a> <a href="#ev-r02">R02</a> <a href="#ev-r15">R15</a></td></tr>
+          <tr><td class="comp">Live decisions against the truth</td><td><span class="chip r">Red</span></td>
+            <td>4,692 events from the Jul–Aug pipeline run, 95 of them fraud: ROC-AUC 0.597. 0 caught at production thresholds. 46 (48.4%) at demo thresholds, while flagging 35.2% of good customers.</td>
+            <td>Confirms the parity finding on real pipeline output.</td><td class="ev"><a href="#ev-r03">R03</a> <a href="#ev-r00">R00</a></td></tr>
+          <tr><td class="comp">Pipeline engineering</td><td><span class="chip g">Green</span></td>
+            <td>Same export: 0 duplicate event IDs, 0 missing values, latency p50 31 ms, p95 63 ms, p99 125 ms. The laptop replica equals the pipeline's scores (largest difference 5 × 10⁻⁹).</td>
+            <td>Exactly-once delivery holds and scoring latency is low.</td><td class="ev"><a href="#ev-r13">R13</a> <a href="#ev-r00">R00</a></td></tr>
+          <tr><td class="comp">Drift over time</td><td><span class="chip a">Amber</span></td>
+            <td>20 of 44 features, the model score included, drift between the first and last 30 days of data. Today only the XGBoost-vs-Groq agreement monitor runs.</td>
+            <td>The data moves. Feature and score drift need scheduled monitoring.</td><td class="ev"><a href="#ev-r14">R14</a></td></tr>
+          <tr><td class="comp">QA harness</td><td><span class="chip g">Green</span></td>
+            <td>Every run self-checks: the copy equals the live features on 5,078,644 values, the rebuild equals the project's test set, and the project's code is unchanged. Gates are automated.</td>
+            <td>Trustworthy and repeatable. A full re-run takes minutes.</td><td class="ev"><a href="#ev-r04">R04</a> <a href="#ev-r08">R08</a></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section aria-labelledby="f-h">
+    <div class="sec-head">
+      <div class="eyebrow">Findings register</div>
+      <h2 id="f-h">What the evidence shows, by severity</h2>
+    </div>
+    <div class="register">
+      <article class="finding"><div class="id">F-01</div><div class="body">
+        <div class="top"><span class="chip r">Critical</span><h3>Training–serving skew in the live feature code</h3></div>
+        <dl class="kv">
+          <dt>Finding</dt><dd>The live path builds 36 of 43 features differently from training. Causes: 9 code defects, 17 fields missing from the Avro event, and 10 card-history counters that need a feature store.</dd>
+          <dt>Impact</dt><dd>Live ROC-AUC 0.574. At production thresholds the live path catches 3.1% of fraud and lets $612,109 of $639,135 through.</dd>
+          <dt>Evidence</dt><dd><a href="#ev-r01">R01</a>, <a href="#ev-r02">R02</a>, <a href="#ev-r04">R04</a>–<a href="#ev-r07">R07</a></dd>
+        </dl></div></article>
+      <article class="finding"><div class="id">F-02</div><div class="body">
+        <div class="top"><span class="chip r">High</span><h3>The headline score is optimistic for future transactions</h3></div>
+        <dl class="kv">
+          <dt>Finding</dt><dd>Tested on later days, the same recipe scores 0.889, not 0.956. Recall falls from 83.9% to 63.1% and PR-AUC from 0.709 to 0.450.</dd>
+          <dt>Impact</dt><dd>Quoting 0.956 overstates expected performance by about 0.066 ROC-AUC.</dd>
+          <dt>Evidence</dt><dd><a href="#ev-r10">R10</a>, <a href="#ev-r15">R15</a></dd>
+        </dl></div></article>
+      <article class="finding"><div class="id">F-03</div><div class="body">
+        <div class="top"><span class="chip r">High</span><h3>Demo thresholds would block a quarter of good customers</h3></div>
+        <dl class="kv">
+          <dt>Finding</dt><dd>At 0.10 / 0.18 the offline model blocks 25.8% of good customers and the live path 29.3%, with precision of 8.0% and 3.9%.</dd>
+          <dt>Impact</dt><dd>Unacceptable customer friction if these thresholds reached production.</dd>
+          <dt>Evidence</dt><dd><a href="#ev-r11">R11</a>, <a href="#ev-r00">R00</a>, <a href="#ev-r08">R08</a></dd>
+        </dl></div></article>
+      <article class="finding"><div class="id">F-04</div><div class="body">
+        <div class="top"><span class="chip a">Medium</span><h3>The largest product segment is the least protected</h3></div>
+        <dl class="kv">
+          <dt>Finding</dt><dd>Product W (75% of traffic) has the lowest recall, 72.9%. Product C flags 20.6% of good customers.</dd>
+          <dt>Impact</dt><dd>Average metrics hide where fraud slips through and where customers are inconvenienced.</dd>
+          <dt>Evidence</dt><dd><a href="#ev-r08">R08</a>, <a href="#ev-r00">R00</a></dd>
+        </dl></div></article>
+      <article class="finding"><div class="id">F-05</div><div class="body">
+        <div class="top"><span class="chip a">Medium</span><h3>Feature and score drift over time</h3></div>
+        <dl class="kv">
+          <dt>Finding</dt><dd>20 of 44 features, the model score included, drift between the first and last 30 days.</dd>
+          <dt>Impact</dt><dd>Without monitoring, quality can decay unnoticed between retrains.</dd>
+          <dt>Evidence</dt><dd><a href="#ev-r14">R14</a></dd>
+        </dl></div></article>
+      <article class="finding"><div class="id">F-06</div><div class="body">
+        <div class="top"><span class="chip a">Medium</span><h3>anonymous.com is encoded as a missing email</h3></div>
+        <dl class="kv">
+          <dt>Finding</dt><dd>The live code treats a real email domain as missing. Live ROC-AUC for that segment is 0.421, worse than a coin flip.</dd>
+          <dt>Impact</dt><dd>Part of F-01, listed on its own because it inverts the signal for 6% of traffic.</dd>
+          <dt>Evidence</dt><dd><a href="#ev-r08">R08</a>, <a href="#ev-r04">R04</a></dd>
+        </dl></div></article>
+      <article class="finding"><div class="id">F-07</div><div class="body">
+        <div class="top"><span class="chip i">Low</span><h3>Minor leakage in the evaluation method</h3></div>
+        <dl class="kv">
+          <dt>Finding</dt><dd>Early stopping used the test set, and frequency tables were fitted on all rows.</dd>
+          <dt>Impact</dt><dd>Measured at 0.0014 ROC-AUC for early stopping. Small, but it should not be in a certified number.</dd>
+          <dt>Evidence</dt><dd><a href="#ev-r10">R10</a>, <a href="#ev-r08">R08</a></dd>
+        </dl></div></article>
+      <article class="finding"><div class="id">F-08</div><div class="body">
+        <div class="top"><span class="chip i">Low</span><h3>Fixes interact</h3></div>
+        <dl class="kv">
+          <dt>Finding</dt><dd>Some fixes lower ROC-AUC on their own: the anonymous.com fix by 0.011 and the frequency tables by 0.004. Together the nine fixes raise it by 0.086.</dd>
+          <dt>Impact</dt><dd>Fixes must ship as a tested bundle, judged on the combined result.</dd>
+          <dt>Evidence</dt><dd><a href="#ev-r04">R04</a></dd>
+        </dl></div></article>
+      <article class="finding"><div class="id">F-09</div><div class="body">
+        <div class="top"><span class="chip g">Strength</span><h3>Pipeline integrity holds</h3></div>
+        <dl class="kv">
+          <dt>Finding</dt><dd>0 duplicate events, 0 missing values, p95 63 ms, and a replica identical to the pipeline to 5 × 10⁻⁹.</dd>
+          <dt>Impact</dt><dd>The streaming design is sound. The weakness is the features it feeds the model, not the plumbing.</dd>
+          <dt>Evidence</dt><dd><a href="#ev-r13">R13</a>, <a href="#ev-r00">R00</a></dd>
+        </dl></div></article>
+    </div>
+  </section>
+
+  <section aria-labelledby="d-h">
+    <div class="sec-head">
+      <div class="eyebrow">Decision record</div>
+      <h2 id="d-h">Architecture decisions from this audit</h2>
+    </div>
+    <div class="decisions">
+      <div class="decision"><div class="id">D-01 · Keep</div><h3>XGBoost stays the champion</h3><p class="muted">Higher recall (83.9% vs 77.8%) and the only model to pass all four gates. Resolves the model choice with evidence.</p></div>
+      <div class="decision"><div class="id">D-02 · Restrict</div><h3>No automated BLOCK from live scores yet</h3><p class="muted">Live scores route to human REVIEW until the live path passes the quality gate on out-of-time data. Addresses F-01.</p></div>
+      <div class="decision"><div class="id">D-03 · Fix</div><h3>Close the skew in three measured phases</h3><p class="muted">Code fixes, then event schema v2, then a feature store. Each phase is re-measured with this harness before it ships. Addresses F-01, F-06, F-08.</p></div>
+      <div class="decision"><div class="id">D-04 · Standardise</div><h3>Out-of-time evaluation is the reference</h3><p class="muted">Quote 0.889 as expected performance. Fit encodings on training data only and early-stop on a validation slice. Addresses F-02, F-07.</p></div>
+      <div class="decision"><div class="id">D-05 · Gate</div><h3>Four quality gates on every change</h3><p class="muted">ROC-AUC ≥ 0.90, recall ≥ 0.80, false-positive rate ≤ 0.08 and precision ≥ 0.30, run automatically before any model or feature change ships.</p></div>
+      <div class="decision"><div class="id">D-06 · Calibrate</div><h3>Production thresholds, re-calibrated per phase</h3><p class="muted">0.50 / 0.85 for real customers. Demo thresholds stay labelled demo-only. Re-calibrate after each fix phase, because the scores shift. Addresses F-03.</p></div>
+      <div class="decision"><div class="id">D-07 · Monitor</div><h3>Scheduled drift and segment monitoring</h3><p class="muted">A daily Evidently drift report on features and score, segment recall by product, and a retraining trigger. Addresses F-04, F-05.</p></div>
+      <div class="decision"><div class="id">D-08 · Extend</div><h3>Widen the audit after the demo</h3><p class="muted">Velocity rule, blocklist, DistilBERT and live latency from a read-only database export; Groq and Gemini within their free-tier budgets.</p></div>
+    </div>
+  </section>
+
+  <section aria-labelledby="r-h">
+    <div class="sec-head">
+      <div class="eyebrow">Remediation roadmap</div>
+      <h2 id="r-h">The measured path from 0.574 to production quality</h2>
+      <p class="muted">Phases 1 and 2 were measured on the same 118,108 transactions with the production model file. "Caught at alert budget" lets every phase flag the same 6.6% of good customers as the offline model, so the phases compare fairly.</p>
+    </div>
+    <div class="phases">
+      <div class="phase"><div class="tag">Today</div><h3>Live pipeline as built</h3>
+        <div class="k"><span>ROC-AUC</span><span>0.574</span><span>Caught at alert budget</span><span>16.8%</span><span>Features matching</span><span>7 / 43</span></div>
+        <p class="note">Fails three of four gates.</p></div>
+      <div class="phase"><div class="tag">Phase 1 · code only</div><h3>Nine live-feature fixes</h3>
+        <div class="k"><span>ROC-AUC</span><span>0.660</span><span>Caught at alert budget</span><span>23.4%</span><span>Features matching</span><span>14 / 43</span></div>
+        <p class="note">About 23% of the gap. Exit: bundle tested, thresholds re-calibrated.</p></div>
+      <div class="phase"><div class="tag">Phase 2 · schema v2</div><h3>17 optional event fields</h3>
+        <div class="k"><span>ROC-AUC</span><span>0.783</span><span>Caught at alert budget</span><span>41.5%</span><span>Features matching</span><span>33 / 43</span></div>
+        <p class="note">About 32% of the gap. A BACKWARD-compatible Avro change.</p></div>
+      <div class="phase"><div class="tag">Phase 3 · feature store</div><h3>Card-history counters</h3>
+        <div class="k"><span>ROC-AUC target</span><span>0.889–0.956</span><span>Caught at alert budget</span><span>up to 83.9%</span><span>Features matching</span><span>43 / 43</span></div>
+        <p class="note">About 45% of the gap. Exit: all four gates pass on out-of-time data.</p></div>
+    </div>
+  </section>
+
+  <section aria-labelledby="g-h">
+    <div class="sec-head">
+      <div class="eyebrow">Quality gates</div>
+      <h2 id="g-h">Pass/fail results, evaluated by Evidently's test engine</h2>
+      <p class="muted">All four tests at the production REVIEW threshold of 0.50. A candidate ships only if every test passes.</p>
+    </div>
+    <div class="tbl">
+      <table class="gates">
+        <thead><tr><th>Candidate</th><th>ROC-AUC ≥ 0.90</th><th>Recall ≥ 0.80</th><th>FPR ≤ 0.08</th><th>Precision ≥ 0.30</th><th>Result</th></tr></thead>
+        <tbody class="num">
+          <tr><td>XGBoost champion, offline</td><td class="pass">0.956</td><td class="pass">83.9%</td><td class="pass">6.6%</td><td class="pass">31.7%</td><td><span class="chip g">Pass</span></td></tr>
+          <tr><td>Random Forest challenger, offline</td><td class="pass">0.950</td><td class="fail">77.8%</td><td class="pass">4.4%</td><td class="pass">39.2%</td><td><span class="chip r">Fail</span></td></tr>
+          <tr><td>XGBoost, out-of-time</td><td class="fail">0.889</td><td class="fail">63.1%</td><td class="pass">7.4%</td><td class="fail">23.4%</td><td><span class="chip r">Fail</span></td></tr>
+          <tr><td>Live pipeline today</td><td class="fail">0.574</td><td class="fail">3.1%</td><td class="pass">0.8%</td><td class="fail">11.7%</td><td><span class="chip r">Fail</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="note">Source: <a href="#ev-r15">R15</a>. The live path passes the false-positive test only because it flags almost nothing.</p>
+  </section>
+
+  <section aria-labelledby="cov-h">
+    <div class="sec-head">
+      <div class="eyebrow">Scope</div>
+      <h2 id="cov-h">What this audit covers, and what it does not</h2>
+    </div>
+    <div class="two">
+      <div class="panel"><h3>Covered</h3><ul class="clean">
+        <li>XGBoost champion and Random Forest challenger</li>
+        <li>The live scoring path: Avro event, live features, model</li>
+        <li>Out-of-time generalisation and evaluation method</li>
+        <li>Threshold policies and segment behaviour</li>
+        <li>Data quality of the training data and of the pipeline export</li>
+        <li>Delivery integrity and latency from the pipeline export</li>
+        <li>Drift between the first and last 30 days</li>
+      </ul></div>
+      <div class="panel"><h3>Not covered here</h3><ul class="clean">
+        <li>Velocity rule and blocklist accuracy</li>
+        <li>DistilBERT text check, SHAP narratives, Groq and Gemini</li>
+        <li>Failover, Kafka resilience and the Hetzner server's own data</li>
+      </ul>
+      <p class="note">These need a read-only database export, or use the free-tier AI budgets. They are scheduled under D-08.</p></div>
+    </div>
+    <div class="panel">
+      <h3>Related evidence from other project tests</h3>
+      <p class="note">Not re-tested in this audit. Listed so the system view is complete.</p>
+      <ul class="clean">
+        <li>Load test (k6, week 15): p95 56.69 ms at 10,000 transactions per minute for 30 minutes.</li>
+        <li>Hot-standby failover (rehearsal, 5 Nov 2026): leadership moved in 971 ms, and the scored stream continued.</li>
+        <li>XGBoost-vs-Groq agreement monitor (5 Nov 2026): 68.3% disagreement on 145 events. The alarm fired as designed.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section aria-labelledby="t-h">
+    <div class="sec-head">
+      <div class="eyebrow">Method and trust</div>
+      <h2 id="t-h">Why these numbers can be relied on</h2>
+    </div>
+    <div class="two">
+      <div class="panel"><h3>Self-checks that passed</h3><ul class="clean">
+        <li>The laptop replica re-scored 4,692 pipeline events with a largest difference of 5 × 10⁻⁹.</li>
+        <li>Offline results reproduce the project's documentation exactly: 0.9562, recall 0.8393, FPR 0.0656.</li>
+        <li>The what-if copy with no fixes equals the project's live features on all 5,078,644 values.</li>
+        <li>An independent rebuild of the training features matches the project's test set exactly.</li>
+      </ul></div>
+      <div class="panel"><h3>Safeguards</h3><ul class="clean">
+        <li>Every script stops if the project's code changes. It stayed unchanged throughout.</li>
+        <li>No cache files, models or data were written into the project.</li>
+        <li>No connection to the server, Kafka, Redis or the database. 0 Groq and 0 Gemini calls.</li>
+        <li>Evidently runs in its own environment, separate from the project's.</li>
+      </ul></div>
+    </div>
+  </section>
+
+  <section aria-labelledby="e-h">
+    <div class="sec-head">
+      <div class="eyebrow">Evidence index</div>
+      <h2 id="e-h">Every report behind this audit</h2>
+      <p class="muted">Each reference in this audit points to one of these reports. Every one is a self-contained page that opens without internet. The 500-transaction pilot runs were only a dry run and are not used.</p>
+    </div>
+    <div class="tbl">
+      <table class="evidx">
+        <thead><tr><th>Ref</th><th>Report</th><th>What it contains</th></tr></thead>
+        <tbody>
+          <tr id="ev-r00"><td>R00</td><td><a class="evf" href="n118108/00_SUMMARY.md">Summary: first evaluation</a></td><td>The headline tables: proof that the laptop copy matches the pipeline, offline vs live ranking quality, fraud and dollars caught and customers blocked at both threshold policies, feature-by-feature parity, and recall by product.</td></tr>
+          <tr id="ev-r01"><td>R01</td><td><a class="evf" href="n118108/01_offline_vs_live_same_transactions.html">Offline vs live, same transactions</a></td><td>Evidently classification report: the model's full-feature scores against the live pipeline's scores on the same 118,108 transactions, with ROC and precision-recall curves and confusion matrices.</td></tr>
+          <tr id="ev-r02"><td>R02</td><td><a class="evf" href="n118108/02_feature_drift_training_vs_live.html">Training inputs vs live inputs</a></td><td>Evidently drift report over all 43 features: feature by feature, how the live inputs differ from what the model saw in training.</td></tr>
+          <tr id="ev-r03"><td>R03</td><td><a class="evf" href="n118108/03_real_live_server_events.html">Real pipeline decisions vs the truth</a></td><td>Evidently classification report on 4,692 events the pipeline actually scored (Jul–Aug run), checked against the true fraud labels.</td></tr>
+          <tr id="ev-r04"><td>R04</td><td><a class="evf" href="n118108/04_WHATIF_SUMMARY.md">Summary: what-if fixes</a></td><td>Before-and-after tables for the nine code fixes: each fix on its own, all fixes together, the richer event and the offline ceiling, at production and demo thresholds.</td></tr>
+          <tr id="ev-r05"><td>R05</td><td><a class="evf" href="n118108/05_live_today_vs_code_fixes.html">Live today vs live with fixes</a></td><td>Evidently classification report comparing today's live scores with the scores after the nine code fixes.</td></tr>
+          <tr id="ev-r06"><td>R06</td><td><a class="evf" href="n118108/06_richer_event_vs_offline.html">Richer event vs the offline model</a></td><td>Evidently classification report: live scores with the code fixes and 17 extra event fields, against the full-feature offline model.</td></tr>
+          <tr id="ev-r07"><td>R07</td><td><a class="evf" href="n118108/07_feature_drift_training_vs_fixed_live.html">Training inputs vs fixed live inputs</a></td><td>Evidently drift report: the features that still differ from training after the code fixes. What remains is mostly the card-history counters.</td></tr>
+          <tr id="ev-r08"><td>R08</td><td><a class="evf" href="extended/08_EXTENDED_SUMMARY.md">Summary: extended checks</a></td><td>Champion vs challenger at both threshold policies, the out-of-time test, results by segment, data quality, drift over time and the quality-gate results.</td></tr>
+          <tr id="ev-r09"><td>R09</td><td><a class="evf" href="extended/09_random_forest_vs_xgboost.html">Random Forest vs XGBoost</a></td><td>Evidently classification report: the challenger against the champion on the same held-out transactions.</td></tr>
+          <tr id="ev-r10"><td>R10</td><td><a class="evf" href="extended/10_out_of_time_vs_random_split.html">Out-of-time vs random split</a></td><td>Evidently classification report: a model trained on past days and tested on later days, against the same recipe on a random split.</td></tr>
+          <tr id="ev-r11"><td>R11</td><td><a class="evf" href="extended/11_live_pipeline_at_demo_threshold_0.10.html">Live pipeline at the demo threshold</a></td><td>Evidently classification report of today's live scores at the 0.10 threshold the live demo runs with.</td></tr>
+          <tr id="ev-r12"><td>R12</td><td><a class="evf" href="extended/12_data_quality_raw_transactions.html">Training data quality</a></td><td>Evidently data summary of the 590,540 raw transactions: missing values, value ranges and category counts for every column the project uses.</td></tr>
+          <tr id="ev-r13"><td>R13</td><td><a class="evf" href="extended/13_data_quality_live_pipeline_export.html">Pipeline output quality</a></td><td>Evidently data summary of the 4,692 scored events: amounts, decisions, scores, latency and feature completeness.</td></tr>
+          <tr id="ev-r14"><td>R14</td><td><a class="evf" href="extended/14_drift_first_vs_last_30_days.html">Drift over time</a></td><td>Evidently drift report comparing the first 30 days of data with the last 30 days, for all 43 features and the model's score.</td></tr>
+          <tr id="ev-r15"><td>R15</td><td><a class="evf" href="extended/15_quality_gate_xgboost_champion.html">Quality gates (4 reports)</a></td><td>Evidently pass/fail tests on ROC-AUC, recall, false-positive rate and precision, run on the champion, the challenger, the out-of-time model and the live pipeline.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <footer>VelocityFraud QA Audit · 5 November 2026 · Built from 16 Evidently reports and 3 summaries (Evidently 0.7.23).</footer>
+</div>
+
+<script>
+  // Report names open the reports in the local evidence pack; in a shared copy they are plain text.
+  (function () {
+    if (location.protocol === "file:") return;
+    document.querySelectorAll("a.evf").forEach(function (a) {
+      var s = document.createElement("span");
+      s.textContent = a.textContent;
+      a.replaceWith(s);
+    });
+  })();
+</script>
+
+</html>

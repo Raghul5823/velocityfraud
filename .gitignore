@@ -74,3 +74,16 @@ data/exports/
 
 # Load-test generated output (k6-summary.json is kept as the cert artifact)
 perf/locust_*.csv
+
+# ---- Demo console, presentation and Evidently pilot ----
+# Demo console: local-only settings (server IPs, SSH key path), run state and logs
+demo-console/settings.json
+demo-console/state.json
+demo-console/logs/
+# Presentation: upload.zip only duplicates the upload/ folder
+presentation/upload.zip
+# Evidently pilot: transaction-level data derived from the IEEE-CIS dataset (not
+# redistributable) and the large HTML reports stay local; keep only the master summary
+evidently-pilot/out/
+evidently-pilot/reports/*
+!evidently-pilot/reports/00_MASTER_QA_AUDIT.html
