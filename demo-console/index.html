@@ -1,0 +1,668 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VelocityFraud Live Demo</title>
+<style>
+  :root {
+    --bg: #f2f4f7; --surface: #ffffff; --line: #dfe3ea; --text: #142036; --muted: #5c6778;
+    --brand: #0b2552; --brand-2: #163d7a; --accent: #1b5fd0; --accent-soft: #e8f0fd;
+    --ok: #12703a; --ok-bg: #e6f4eb; --warn: #8f5400; --warn-bg: #fff3dc; --fail: #ad2219; --fail-bg: #fdeceb;
+    --info: #4b2a99; --info-bg: #f0ebfb; --teal: #00626b; --teal-bg: #e2f4f5;
+    --console: #0d131b; --console-line: #1d2733; --console-text: #d5dce6; --console-dim: #7d8a9b;
+    --radius: 10px; --shadow: 0 1px 2px rgba(16,24,40,.06), 0 1px 3px rgba(16,24,40,.08);
+    --mono: "Cascadia Mono", "Cascadia Code", Consolas, "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.45 "Segoe UI", system-ui, -apple-system, sans-serif; display: flex; flex-direction: column; }
+  button { font: inherit; cursor: pointer; }
+  button:disabled { cursor: not-allowed; opacity: .45; }
+
+  /* Header */
+  .topbar { background: linear-gradient(90deg, var(--brand), var(--brand-2)); color: #fff; padding: 12px 20px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+  .brand { display: flex; align-items: center; gap: 12px; min-width: 0; flex: 1 1 420px; }
+  .mark { width: 40px; height: 40px; border-radius: 9px; background: #fff; color: var(--brand); display: grid; place-items: center; font-weight: 800; letter-spacing: .5px; flex: none; }
+  .title { font-size: 18px; font-weight: 650; letter-spacing: .2px; }
+  .sub { font-size: 12.5px; opacity: .8; }
+  .pills { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .pill { font-size: 12.5px; padding: 5px 10px; border-radius: 999px; background: rgba(255,255,255,.12); border: 1px solid rgba(255,255,255,.22); white-space: nowrap; display: inline-flex; align-items: center; gap: 6px; }
+  .pill::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: #9aa6b8; }
+  .pill.ok::before { background: #3ddc84; } .pill.warn::before { background: #ffb547; } .pill.fail::before { background: #ff5d52; }
+  .pill.clickable { cursor: pointer; }
+  .clock { font-variant-numeric: tabular-nums; font-size: 15px; font-weight: 600; padding-left: 6px; }
+
+  /* Toolbar */
+  .toolbar { background: var(--surface); border-bottom: 1px solid var(--line); padding: 8px 20px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .toolbar .label { font-size: 12.5px; color: var(--muted); margin-right: 2px; }
+  .linkbtn, .tbtn { border: 1px solid var(--line); background: var(--surface); color: var(--text); border-radius: 8px; padding: 6px 11px; font-size: 13.5px; }
+  .linkbtn:hover, .tbtn:hover { border-color: var(--accent); color: var(--accent); }
+  .spacer { flex: 1; }
+  .toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 13.5px; color: var(--muted); user-select: none; }
+  .primary { background: var(--accent); color: #fff; border: 1px solid var(--accent); border-radius: 8px; padding: 7px 14px; font-weight: 600; font-size: 14px; }
+  .primary:hover { background: #154fb0; }
+  .progress { font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+  /* Layout */
+  .layout { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(400px, 43%) 1fr; gap: 16px; padding: 16px 20px; }
+  .steps { overflow-y: auto; padding-right: 4px; }
+  .output { min-height: 0; display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; }
+
+  /* Sections and steps */
+  .sec { margin-bottom: 14px; }
+  .sec-head { width: 100%; text-align: left; background: none; border: 0; padding: 4px 2px 8px; display: flex; align-items: baseline; gap: 10px; color: var(--text); }
+  .sec-head .caret { color: var(--muted); font-size: 12px; width: 12px; transition: transform .15s; }
+  .sec.collapsed .caret { transform: rotate(-90deg); }
+  .sec.collapsed .sec-body { display: none; }
+  .sec-title { font-weight: 650; font-size: 15.5px; }
+  .sec-sub { color: var(--muted); font-size: 12.5px; }
+  .sec.presenter .sec-title::after { content: "PRESENTER"; margin-left: 8px; font-size: 10.5px; letter-spacing: .6px; color: var(--info); background: var(--info-bg); padding: 2px 6px; border-radius: 4px; vertical-align: 2px; }
+  .step { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); margin-bottom: 8px; transition: border-color .15s, box-shadow .15s; }
+  .step.running { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .step.next { border-left: 4px solid var(--accent); }
+  .step-row { display: flex; align-items: center; gap: 12px; padding: 10px 12px; }
+  .num { flex: none; min-width: 38px; height: 30px; border-radius: 7px; display: grid; place-items: center; font-weight: 700; font-size: 13.5px; background: var(--accent-soft); color: var(--accent); font-variant-numeric: tabular-nums; }
+  .step.done .num { background: var(--ok-bg); color: var(--ok); }
+  .step.failed .num { background: var(--fail-bg); color: var(--fail); }
+  .step-main { flex: 1; min-width: 0; cursor: pointer; }
+  .step-title { font-weight: 600; font-size: 14.5px; }
+  .step-main:hover .step-title { color: var(--accent); }
+  .step-purpose { font-size: 13px; color: var(--muted); margin-top: 4px; }
+  .step-tags { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 3px; align-items: center; }
+  .tag { font-size: 11.5px; padding: 1px 7px; border-radius: 4px; background: #eef1f5; color: var(--muted); }
+  .tag.k-action { background: var(--accent-soft); color: var(--accent); }
+  .tag.k-quota { background: var(--warn-bg); color: var(--warn); }
+  .tag.k-control { background: var(--info-bg); color: var(--info); }
+  .tag.k-local { background: var(--teal-bg); color: var(--teal); }
+  .tag.k-load { background: var(--warn-bg); color: var(--warn); }
+  .state { font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .state.ok { color: var(--ok); } .state.fail { color: var(--fail); } .state.stopped { color: var(--warn); }
+  .run { flex: none; border: 1px solid var(--accent); color: var(--accent); background: var(--surface); border-radius: 8px; padding: 6px 14px; font-weight: 600; font-size: 13.5px; min-width: 92px; }
+  .run:hover:not(:disabled) { background: var(--accent); color: #fff; }
+  .step-notes { padding: 0 12px 10px 62px; font-size: 13.5px; display: grid; gap: 4px; }
+  body.no-notes .step-notes { display: none; }
+  .note-say { color: var(--text); }
+  .note-show { color: var(--teal); }
+  .note-caution { color: var(--warn); }
+  .note-label { font-weight: 600; margin-right: 4px; }
+  .step-links { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 2px; }
+  .step-links button { font-size: 12.5px; padding: 3px 9px; border-radius: 6px; border: 1px solid var(--line); background: var(--bg); }
+
+  /* Output panel */
+  .out-head { padding: 12px 16px; border-bottom: 1px solid var(--line); display: flex; gap: 12px; align-items: center; }
+  .out-titles { flex: 1; min-width: 0; }
+  .out-step { font-weight: 650; font-size: 16px; }
+  .out-meta { font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .badge { display: inline-block; font-size: 11.5px; font-weight: 700; padding: 2px 8px; border-radius: 4px; margin-right: 6px; letter-spacing: .3px; }
+  .badge.running { background: var(--accent-soft); color: var(--accent); }
+  .badge.ok { background: var(--ok-bg); color: var(--ok); }
+  .badge.fail { background: var(--fail-bg); color: var(--fail); }
+  .badge.stopped { background: var(--warn-bg); color: var(--warn); }
+  .stop { border: 1px solid var(--fail); color: var(--fail); background: var(--surface); border-radius: 8px; padding: 6px 12px; font-weight: 600; }
+  details.brief { border-bottom: 1px solid var(--line); }
+  details.brief summary { padding: 7px 16px; font-size: 12.5px; color: var(--muted); cursor: pointer; }
+  .brief-body { padding: 0 16px 10px; font-size: 13.5px; max-height: 30vh; overflow: auto; }
+  .brief-purpose { margin: 0 0 6px; }
+  .brief-label { font-weight: 650; color: var(--accent); font-size: 11.5px; letter-spacing: .5px; text-transform: uppercase; margin: 4px 0 2px; }
+  .brief-body ul { margin: 0; padding-left: 18px; }
+  .brief-body li { margin: 1px 0; }
+  details.cmd { border-bottom: 1px solid var(--line); }
+  details.cmd summary { padding: 7px 16px; font-size: 12.5px; color: var(--muted); cursor: pointer; }
+  details.cmd pre { margin: 0; max-height: 220px; overflow: auto; background: #f7f8fa; padding: 10px 16px; font: 12px/1.45 var(--mono); white-space: pre; border-top: 1px solid var(--line); }
+  .console { flex: 1; min-height: 0; overflow: auto; background: var(--console); color: var(--console-text); font: 13.5px/1.5 var(--mono); padding: 12px 16px; }
+  .console .ln { white-space: pre-wrap; overflow-wrap: anywhere; min-height: 1.5em; }
+  .console .h { color: #8ab4ff; font-weight: 700; margin-top: 6px; }
+  .console .ok { color: #57d68d; } .console .warn { color: #ffc266; } .console .fail { color: #ff7b72; font-weight: 600; }
+  .console .dim { color: var(--console-dim); }
+  .console .big-ok { color: #0d131b; background: #57d68d; display: inline-block; padding: 2px 10px; border-radius: 4px; font-weight: 700; }
+  .console .big-fail { color: #fff; background: #d6453b; display: inline-block; padding: 2px 10px; border-radius: 4px; font-weight: 700; }
+  .placeholder { color: var(--console-dim); font-family: "Segoe UI", system-ui, sans-serif; font-size: 14px; padding: 8px 0; white-space: normal; }
+  .next-panel { border-top: 1px solid var(--line); padding: 10px 16px; background: #fbfcfd; display: none; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 14px; }
+  .next-panel.show { display: flex; }
+  .next-panel .lead { font-weight: 650; color: var(--teal); }
+
+  /* Dialogs and toast */
+  dialog { border: 0; border-radius: 12px; padding: 0; width: min(560px, calc(100vw - 32px)); box-shadow: 0 20px 50px rgba(16,24,40,.25); color: var(--text); }
+  dialog::backdrop { background: rgba(11,22,40,.45); }
+  .dlg-head { padding: 16px 20px 6px; font-weight: 650; font-size: 17px; }
+  .dlg-body { padding: 4px 20px 12px; font-size: 14.5px; }
+  .dlg-foot { padding: 12px 20px 16px; display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
+  .field { display: grid; gap: 4px; margin: 10px 0; }
+  .field label { font-size: 12.5px; color: var(--muted); font-weight: 600; }
+  .field input { font: inherit; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; }
+  .field input:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
+  .hint { font-size: 12.5px; color: var(--muted); }
+  .danger { border: 1px solid var(--fail); color: var(--fail); background: #fff; border-radius: 8px; padding: 7px 12px; }
+  .notes-list { margin: 0; padding: 0; list-style: none; display: grid; gap: 10px; max-height: 60vh; overflow: auto; }
+  .notes-list b { display: block; font-size: 13px; color: var(--brand-2); }
+  .notes-list span { font-size: 13.5px; }
+  .toast { position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%); background: #1d2939; color: #fff; padding: 10px 16px; border-radius: 8px; font-size: 14px; box-shadow: var(--shadow); opacity: 0; pointer-events: none; transition: opacity .2s; max-width: 90vw; }
+  .toast.show { opacity: 1; }
+
+  @media (max-width: 1100px) {
+    .layout { grid-template-columns: 1fr; }
+    .output { min-height: 60vh; }
+  }
+  @media (max-width: 640px) {
+    .topbar, .toolbar, .layout { padding-left: 16px; padding-right: 16px; }
+    .layout { min-width: 0; }
+    .steps { min-width: 0; }
+    .step-notes { padding-left: 12px; }
+  }
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <div class="mark">VF</div>
+    <div>
+      <div class="title">VelocityFraud &middot; Live Demo Console</div>
+      <div class="sub">IMPACT pSiddhi 3.0 &middot; S2-D-06 Fraud Detection Data Pipeline &middot; Raghul Sridhar</div>
+    </div>
+  </div>
+  <div class="pills">
+    <span class="pill clickable" id="pill-server" title="Open settings">Server: not set</span>
+    <span class="pill" id="pill-api">Scoring API</span>
+    <span class="pill" id="pill-tunnel">Secure tunnel</span>
+    <span class="clock" id="clock">--:--:-- IST</span>
+  </div>
+</header>
+
+<nav class="toolbar">
+  <span class="label">Open:</span>
+  <span id="quicklinks" style="display:contents"></span>
+  <span class="spacer"></span>
+  <span class="progress" id="progress"></span>
+  <label class="toggle"><input type="checkbox" id="chk-notes" checked> Presenter notes</label>
+  <button class="tbtn" id="btn-notes">Disclosures</button>
+  <button class="tbtn" id="btn-settings">Settings</button>
+  <button class="primary" id="btn-next">Run next</button>
+</nav>
+
+<main class="layout">
+  <section class="steps" id="steps" aria-label="Demo steps"></section>
+  <section class="output" aria-label="Step output">
+    <div class="out-head">
+      <div class="out-titles">
+        <div class="out-step" id="out-title">Ready</div>
+        <div class="out-meta" id="out-meta">Choose a step on the left, or press Run next.</div>
+      </div>
+      <button class="stop" id="btn-stop" hidden>Stop</button>
+    </div>
+    <details class="brief" id="out-brief" hidden>
+      <summary>About this step</summary>
+      <div class="brief-body" id="brief-body"></div>
+    </details>
+    <details class="cmd" id="out-cmd" hidden>
+      <summary>Show the exact command for this step</summary>
+      <pre id="out-script"></pre>
+    </details>
+    <div class="console" id="console"><div class="placeholder">Output from the cloud server streams here, line by line, as each step runs.</div></div>
+    <div class="next-panel" id="next-panel"></div>
+  </section>
+</main>
+
+<dialog id="dlg-confirm">
+  <div class="dlg-head" id="confirm-title">Confirm</div>
+  <div class="dlg-body" id="confirm-body"></div>
+  <div class="dlg-foot">
+    <button class="tbtn" id="confirm-cancel">Cancel</button>
+    <button class="primary" id="confirm-ok">Run</button>
+  </div>
+</dialog>
+
+<dialog id="dlg-settings">
+  <div class="dlg-head">Settings</div>
+  <div class="dlg-body">
+    <div class="field">
+      <label for="in-ip">Hetzner server IPv4 address</label>
+      <input id="in-ip" placeholder="e.g. 203.0.113.10" autocomplete="off" spellcheck="false">
+    </div>
+    <div class="field">
+      <label for="in-loadgen">Load server IPv4 address (optional - for P5, P6, 5.4 and 5.5)</label>
+      <input id="in-loadgen" placeholder="leave empty if there is no load server" autocomplete="off" spellcheck="false">
+    </div>
+    <div class="field">
+      <label for="in-key">SSH private key</label>
+      <input id="in-key" autocomplete="off" spellcheck="false">
+    </div>
+    <div class="hint">After a snapshot restore the server gets a new IP. Save it here, then use Test connection.</div>
+  </div>
+  <div class="dlg-foot">
+    <button class="danger" id="btn-reset">Clear step marks</button>
+    <button class="tbtn" id="btn-forget">Forget old host key</button>
+    <span class="spacer"></span>
+    <button class="tbtn" id="btn-test">Test connection</button>
+    <button class="tbtn" id="settings-cancel">Close</button>
+    <button class="primary" id="settings-save">Save</button>
+  </div>
+</dialog>
+
+<dialog id="dlg-notes">
+  <div class="dlg-head">Disclosures and cautions</div>
+  <div class="dlg-body"><ul class="notes-list" id="notes-list"></ul></div>
+  <div class="dlg-foot"><button class="primary" id="notes-close">Close</button></div>
+</dialog>
+
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+"use strict";
+const TOKEN = "__VF_TOKEN__";
+const ACT_SECTIONS = ["act1", "act2", "act3", "act4", "act5"];
+const $ = (s) => document.querySelector(s);
+let CFG = null;           // config from the server
+let RUN = null;           // { id, step, next }
+let STATUS = null;        // last status poll
+
+function store(key, value) { try { if (value === undefined) return localStorage.getItem(key); localStorage.setItem(key, value); } catch (e) { return null; } return null; }
+
+async function api(path, opts = {}) {
+  try {
+    const res = await fetch(path, { ...opts, headers: { "Content-Type": "application/json", "X-VF-Token": TOKEN } });
+    let data = {};
+    try { data = await res.json(); } catch (e) { data = {}; }
+    return { ok: res.ok, status: res.status, data };
+  } catch (e) {
+    return { ok: false, status: 0, data: { error: "The console server is not responding. Is its window still open?" } };
+  }
+}
+
+function el(tag, cls, text) {
+  const n = document.createElement(tag);
+  if (cls) n.className = cls;
+  if (text !== undefined) n.textContent = text;
+  return n;
+}
+
+function toast(msg) {
+  const t = $("#toast");
+  t.textContent = msg;
+  t.classList.add("show");
+  clearTimeout(toast.timer);
+  toast.timer = setTimeout(() => t.classList.remove("show"), 4200);
+}
+
+function stepById(id) { return CFG.steps.find((s) => s.id === id); }
+
+function linkUrl(key) {
+  const l = CFG.links[key];
+  return l.url.replace("{ip}", CFG.settings.server_ip || "SERVER-IP");
+}
+
+function openLink(key) {
+  const l = CFG.links[key];
+  if (l.url.includes("{ip}") && !CFG.settings.server_ip) return toast("Set the server IP in Settings first.");
+  if (l.needs_tunnel && STATUS && STATUS.tunnel !== "up") toast(l.label + " needs the secure tunnel (step P2).");
+  window.open(linkUrl(key), "_blank", "noopener");
+}
+
+/* ------------------------------------------------------------------ rendering */
+
+function actSteps() { return CFG.steps.filter((s) => ACT_SECTIONS.includes(s.section)); }
+
+function nextStep() {
+  // The readiness check must pass before the demo acts start.
+  const ready = CFG.state.preflight;
+  if (!ready || ready.status !== "ok") return stepById("preflight");
+  return actSteps().find((s) => { const st = CFG.state[s.id]; return !st || st.status !== "ok"; }) || null;
+}
+
+function renderQuickLinks() {
+  const box = $("#quicklinks");
+  box.textContent = "";
+  for (const key of Object.keys(CFG.links)) {
+    const b = el("button", "linkbtn", CFG.links[key].label);
+    b.onclick = () => openLink(key);
+    box.appendChild(b);
+  }
+}
+
+function renderSteps() {
+  const wrap = $("#steps");
+  const scroll = wrap.scrollTop;
+  wrap.textContent = "";
+  const next = nextStep();
+  for (const sec of CFG.sections) {
+    const items = CFG.steps.filter((s) => s.section === sec.id);
+    if (!items.length) continue;
+    const box = el("section", "sec" + (sec.presenter_only ? " presenter" : ""));
+    const collapsedKey = "vf.collapsed." + sec.id;
+    const stored = store(collapsedKey);
+    if (stored === "1" || (stored === null && sec.id === "recovery")) box.classList.add("collapsed");
+    const head = el("button", "sec-head");
+    head.appendChild(el("span", "caret", "▼"));
+    const titles = el("span");
+    titles.appendChild(el("span", "sec-title", sec.title));
+    head.appendChild(titles);
+    head.appendChild(el("span", "sec-sub", sec.subtitle || ""));
+    head.onclick = () => { box.classList.toggle("collapsed"); store(collapsedKey, box.classList.contains("collapsed") ? "1" : "0"); };
+    box.appendChild(head);
+    const body = el("div", "sec-body");
+    for (const s of items) body.appendChild(renderStep(s, next && next.id === s.id));
+    box.appendChild(body);
+    wrap.appendChild(box);
+  }
+  wrap.scrollTop = scroll;
+  const done = actSteps().filter((s) => (CFG.state[s.id] || {}).status === "ok").length;
+  $("#progress").textContent = `Demo progress ${done} / ${actSteps().length}`;
+  const nb = $("#btn-next");
+  nb.textContent = next ? `Run next ▸ ${next.num} ${next.title}` : "All demo steps complete";
+  nb.disabled = !next || !!RUN;
+}
+
+function renderStep(s, isNext) {
+  const st = CFG.state[s.id];
+  const card = el("article", "step");
+  card.dataset.id = s.id;
+  if (st && st.status === "ok") card.classList.add("done");
+  if (st && st.status === "fail") card.classList.add("failed");
+  if (RUN && RUN.step.id === s.id) card.classList.add("running");
+  if (isNext) card.classList.add("next");
+
+  const row = el("div", "step-row");
+  row.appendChild(el("span", "num", s.num));
+  const main = el("div", "step-main");
+  main.title = "Click to read about this step without running it";
+  main.onclick = () => preview(s);
+  main.appendChild(el("div", "step-title", s.title));
+  const tags = el("div", "step-tags");
+  tags.appendChild(el("span", "tag k-" + s.kind, CFG.kinds[s.kind]));
+  if (st) {
+    const label = st.status === "ok" ? "✓ Done" : st.status === "fail" ? "✗ Failed" : "Stopped";
+    tags.appendChild(el("span", "state " + st.status, `${label} ${st.last_run} · ${st.duration}s${st.count > 1 ? " · run " + st.count + "×" : ""}`));
+  }
+  main.appendChild(tags);
+  if (s.purpose) main.appendChild(el("div", "step-purpose", s.purpose));
+  row.appendChild(main);
+  const btn = el("button", "run", st ? "Run again" : "Run");
+  btn.disabled = !!RUN;
+  btn.onclick = () => requestRun(s);
+  row.appendChild(btn);
+  card.appendChild(row);
+
+  if (s.say || s.show || s.caution || (s.links && s.links.length)) {
+    const notes = el("div", "step-notes");
+    const add = (cls, label, text) => { const p = el("div", cls); p.appendChild(el("span", "note-label", label)); p.appendChild(document.createTextNode(text)); notes.appendChild(p); };
+    const presenterOnly = (CFG.sections.find((x) => x.id === s.section) || {}).presenter_only;
+    if (s.say) add("note-say", presenterOnly ? "Note:" : "Say:", s.say);
+    if (s.show) add("note-show", "Show:", s.show);
+    if (s.caution) add("note-caution", "Caution:", s.caution);
+    if (s.links && s.links.length) {
+      const lk = el("div", "step-links");
+      for (const k of s.links) { const b = el("button", "", CFG.links[k].label); b.onclick = () => openLink(k); lk.appendChild(b); }
+      notes.appendChild(lk);
+    }
+    card.appendChild(notes);
+  }
+  return card;
+}
+
+/* ------------------------------------------------------------------ console */
+
+function classify(line) {
+  if (/^\s*== .* ==\s*$/.test(line)) return "h";
+  if (/READY FOR DEMO/.test(line)) return "big-ok";
+  if (/NOT READY/.test(line)) return "big-fail";
+  if (/\[FAIL\]|\bERROR\b|Traceback|\bCRITICAL\b/.test(line)) return "fail";
+  if (/\[WARN\]|\bWARNING\b|\[REFUSED\]/.test(line)) return "warn";
+  if (/\[ OK \]|\bSUCCESS\b/.test(line)) return "ok";
+  if (/^\s*[-+]{6,}\s*$|^\(\d+ rows?\)$/.test(line)) return "dim";
+  return "";
+}
+
+function appendLine(text) {
+  const c = $("#console");
+  const atBottom = c.scrollHeight - c.scrollTop - c.clientHeight < 60;
+  const row = el("div", "ln");
+  const cls = classify(text);
+  if (cls === "big-ok" || cls === "big-fail") {
+    row.appendChild(el("span", cls, text.trim()));
+  } else {
+    if (cls) row.classList.add(cls);
+    row.textContent = cls === "h" ? text.trim().replace(/^== | ==$/g, "") : text;
+  }
+  c.appendChild(row);
+  if (atBottom) c.scrollTop = c.scrollHeight;
+}
+
+function setMeta(status, duration) {
+  const meta = $("#out-meta");
+  meta.textContent = "";
+  const labels = { running: "RUNNING", ok: "COMPLETED", fail: "FAILED", stopped: "STOPPED" };
+  meta.appendChild(el("span", "badge " + status, labels[status] || status));
+  meta.appendChild(document.createTextNode(`${duration.toFixed(1)} s`));
+}
+
+function showNextPanel(step, status) {
+  const p = $("#next-panel");
+  p.textContent = "";
+  p.classList.remove("show");
+  if (status !== "ok") return;
+  const after = nextStep();
+  if (step.show) { p.appendChild(el("span", "lead", "Now on screen:")); p.appendChild(el("span", "", step.show)); }
+  for (const k of step.links || []) { const b = el("button", "linkbtn", "Open " + CFG.links[k].label); b.onclick = () => openLink(k); p.appendChild(b); }
+  if (after && ACT_SECTIONS.includes(step.section)) {
+    p.appendChild(el("span", "spacer"));
+    const b = el("button", "primary", `Next ▸ ${after.num} ${after.title}`);
+    b.onclick = () => requestRun(after);
+    p.appendChild(b);
+  }
+  if (p.childNodes.length) p.classList.add("show");
+}
+
+/* ------------------------------------------------------------------ runs */
+
+function confirmDialog(title, body, okLabel) {
+  return new Promise((resolve) => {
+    const d = $("#dlg-confirm");
+    $("#confirm-title").textContent = title;
+    $("#confirm-body").textContent = body;
+    $("#confirm-ok").textContent = okLabel || "Run";
+    const done = (v) => { d.close(); $("#confirm-ok").onclick = null; $("#confirm-cancel").onclick = null; resolve(v); };
+    $("#confirm-ok").onclick = () => done(true);
+    $("#confirm-cancel").onclick = () => done(false);
+    d.oncancel = () => resolve(false);
+    d.showModal();
+  });
+}
+
+async function requestRun(step) {
+  if (RUN) return toast("Wait for the current step to finish.");
+  if (!CFG.settings.server_ip) { toast("Set the server IP first."); return openSettings(); }
+  const st = CFG.state[step.id];
+  let question = null;
+  if (step.confirm) question = step.confirm;
+  else if (step.confirm_rerun && st && st.count > 0) question = `This step already ran at ${st.last_run}. Running it again records another entry on the server. Continue?`;
+  if (question && !(await confirmDialog(`${step.num} · ${step.title}`, question))) return;
+  const r = await api("/api/run", { method: "POST", body: JSON.stringify({ step_id: step.id, confirmed: !!question }) });
+  if (!r.ok) return toast(r.data.error || "Could not start the step.");
+  attach(r.data.run_id, step);
+}
+
+function fillBrief(step) {
+  const box = $("#out-brief");
+  const body = $("#brief-body");
+  body.textContent = "";
+  if (!step.purpose) { box.hidden = true; return; }
+  body.appendChild(el("p", "brief-purpose", step.purpose));
+  if (step.built && step.built.length) {
+    body.appendChild(el("div", "brief-label", "How it is built"));
+    const ul = el("ul");
+    for (const b of step.built) ul.appendChild(el("li", "", b));
+    body.appendChild(ul);
+  }
+  box.open = store("vf.brief.open") !== "0";
+  box.hidden = false;
+}
+
+function showStepHeader(step) {
+  $("#out-title").textContent = step.num ? `${step.num} · ${step.title}` : step.title;
+  fillBrief(step);
+  const cmd = $("#out-cmd");
+  cmd.hidden = false;
+  cmd.open = false;
+  $("#out-script").textContent = step.kind === "local"
+    ? "Runs on this laptop (no server command). Action: " + step.local
+    : "# Runs on the Hetzner server in ~/velocityfraud\n" + step.script.trim();
+}
+
+function preview(step) {
+  if (RUN) return;
+  showStepHeader(step);
+  $("#out-meta").textContent = "Preview - press Run to execute this step on the cloud server.";
+  const c = $("#console");
+  c.textContent = "";
+  c.appendChild(el("div", "placeholder", "Output from the cloud server streams here, line by line, when you press Run."));
+  $("#next-panel").classList.remove("show");
+}
+
+function attach(runId, step) {
+  RUN = { id: runId, step, next: 0 };
+  showStepHeader(step);
+  setMeta("running", 0);
+  const c = $("#console");
+  c.textContent = "";
+  $("#next-panel").classList.remove("show");
+  $("#btn-stop").hidden = step.kind === "local";
+  renderSteps();
+  poll();
+}
+
+async function poll() {
+  if (!RUN) return;
+  const r = await api(`/api/run/${RUN.id}?from=${RUN.next}`);
+  if (!r.ok) { appendLine("[FAIL] " + (r.data.error || "Lost contact with the console server.")); return finishRun("fail"); }
+  for (const line of r.data.lines) appendLine(line);
+  RUN.next = r.data.next;
+  setMeta(r.data.status, r.data.duration);
+  if (r.data.status === "running") setTimeout(poll, 300);
+  else finishRun(r.data.status);
+}
+
+async function finishRun(status) {
+  const step = RUN ? RUN.step : null;
+  RUN = null;
+  $("#btn-stop").hidden = true;
+  const r = await api("/api/config");
+  if (r.ok) { CFG.state = r.data.state; }
+  renderSteps();
+  if (step) showNextPanel(step, status);
+}
+
+async function stopRun() {
+  if (!RUN) return;
+  const r = await api(`/api/stop/${RUN.id}`, { method: "POST", body: "{}" });
+  if (!r.ok) toast(r.data.error || "Could not stop the step.");
+}
+
+/* ------------------------------------------------------------------ status */
+
+function setPill(id, cls, text) { const p = $(id); p.className = "pill" + (cls ? " " + cls : "") + (id === "#pill-server" ? " clickable" : ""); p.textContent = text; }
+
+async function refreshStatus() {
+  const r = await api("/api/status");
+  if (!r.ok) { setPill("#pill-api", "fail", "Console offline"); return; }
+  STATUS = r.data;
+  const s = r.data;
+  setPill("#pill-server", s.server_ip ? "ok" : "warn", s.server_ip ? `Server ${s.server_ip}` : "Server: not set");
+  if (s.api.ok) {
+    const demo = Number(s.api.review) === 0.1 && Number(s.api.block) === 0.18;
+    setPill("#pill-api", demo ? "ok" : "warn", `Scoring API online · ${s.api.review} / ${s.api.block}`);
+  } else {
+    setPill("#pill-api", s.server_ip ? "fail" : "", s.server_ip ? "Scoring API offline" : "Scoring API");
+  }
+  const t = { up: ["ok", "Secure tunnel open"], partial: ["warn", "Tunnel partial"], down: ["", "Secure tunnel closed"] }[s.tunnel];
+  setPill("#pill-tunnel", t[0], t[1]);
+}
+
+function tickClock() {
+  try { $("#clock").textContent = new Date().toLocaleTimeString("en-GB", { timeZone: "Asia/Kolkata" }) + " IST"; }
+  catch (e) { $("#clock").textContent = new Date().toLocaleTimeString("en-GB"); }
+}
+
+/* ------------------------------------------------------------------ dialogs */
+
+function openSettings() {
+  $("#in-ip").value = CFG.settings.server_ip || "";
+  $("#in-loadgen").value = CFG.settings.loadgen_ip || "";
+  $("#in-key").value = CFG.settings.key_path || "";
+  $("#dlg-settings").showModal();
+}
+
+async function saveSettings(silent) {
+  const r = await api("/api/settings", { method: "POST", body: JSON.stringify({ server_ip: $("#in-ip").value.trim(), loadgen_ip: $("#in-loadgen").value.trim(), key_path: $("#in-key").value.trim() }) });
+  if (!r.ok) { toast(r.data.error || "Could not save settings."); return false; }
+  CFG.settings = r.data.settings;
+  if (!silent) toast("Settings saved.");
+  renderQuickLinks();
+  refreshStatus();
+  return true;
+}
+
+function openNotes() {
+  const ul = $("#notes-list");
+  ul.textContent = "";
+  for (const [title, text] of CFG.notes) { const li = el("li"); li.appendChild(el("b", "", title)); li.appendChild(el("span", "", text)); ul.appendChild(li); }
+  $("#dlg-notes").showModal();
+}
+
+/* ------------------------------------------------------------------ boot */
+
+async function boot() {
+  if (location.protocol === "file:") {
+    $("#out-title").textContent = "Start the console first";
+    $("#out-meta").textContent = "This page was opened as a file, so it cannot reach the console server.";
+    $("#console").textContent = "";
+    for (const line of ["== How to start ==", "  1. Close this tab.", "  2. In File Explorer, open the vf-demo-console folder.",
+                        "  3. Double-click 'Start Demo Console.cmd'.", "  4. The console opens by itself at http://127.0.0.1:8765 - keep the black window open."]) appendLine(line);
+    $("#btn-next").disabled = true;
+    return;
+  }
+  const r = await api("/api/config");
+  if (!r.ok) { $("#console").textContent = r.data.error || "Could not load the console configuration."; return; }
+  CFG = r.data;
+  const notesOn = store("vf.notes") !== "0";
+  $("#chk-notes").checked = notesOn;
+  document.body.classList.toggle("no-notes", !notesOn);
+  renderQuickLinks();
+  renderSteps();
+  if (CFG.active_run) {
+    const res = await api(`/api/run/${CFG.active_run}?from=0`);
+    if (res.ok) attach(CFG.active_run, stepById(res.data.step_id));
+  }
+  if (!CFG.settings.server_ip) openSettings();
+  refreshStatus();
+  setInterval(refreshStatus, 5000);
+  tickClock();
+  setInterval(tickClock, 1000);
+}
+
+$("#chk-notes").onchange = (e) => { document.body.classList.toggle("no-notes", !e.target.checked); store("vf.notes", e.target.checked ? "1" : "0"); };
+$("#btn-next").onclick = () => { const n = nextStep(); if (n) requestRun(n); };
+$("#btn-stop").onclick = stopRun;
+$("#out-brief").addEventListener("toggle", (e) => { if (!e.target.hidden) store("vf.brief.open", e.target.open ? "1" : "0"); });
+$("#btn-settings").onclick = openSettings;
+$("#pill-server").onclick = openSettings;
+$("#btn-notes").onclick = openNotes;
+$("#notes-close").onclick = () => $("#dlg-notes").close();
+$("#settings-cancel").onclick = () => $("#dlg-settings").close();
+$("#settings-save").onclick = async () => { if (await saveSettings(false)) $("#dlg-settings").close(); };
+$("#btn-test").onclick = async () => { if (!(await saveSettings(true))) return; $("#dlg-settings").close(); requestRun(stepById("connect")); };
+$("#btn-forget").onclick = async () => {
+  if (!(await saveSettings(true))) return;
+  const r = await api("/api/forget-host-key", { method: "POST", body: "{}" });
+  toast(r.ok ? "Old host key removed: " + r.data.message.split("\n")[0] : (r.data.error || "Could not remove the host key."));
+};
+$("#btn-reset").onclick = async () => {
+  $("#dlg-settings").close();
+  if (!(await confirmDialog("Clear step marks", "Clear every Done / Failed mark in this console? Nothing on the server changes. Use this after the rehearsal.", "Clear marks"))) return;
+  const r = await api("/api/reset-state", { method: "POST", body: "{}" });
+  if (r.ok) { CFG.state = {}; renderSteps(); toast("Step marks cleared."); }
+};
+
+boot();
+</script>
+</body>
+</html>
